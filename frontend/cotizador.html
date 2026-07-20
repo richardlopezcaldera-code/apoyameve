@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cotizador</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1050px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #e8590c; }
+    .barra { display: flex; gap: .5rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: .55rem .7rem; font-size: .95rem; }
+    input { border: 1px solid #ccc; border-radius: 6px; }
+    button { background: #e8590c; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    button.sec { background: #333; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: .5rem; border-bottom: 1px solid #eee; font-size: .85rem; text-align: left; }
+    td input { width: 90px; }
+    .conf { font-size: .75rem; color: #888; }
+    .tot { text-align: right; font-size: 1.1rem; margin-top: 1rem; }
+    .low { background: #fff4e6; }
+  </style>
+</head>
+<body>
+  <h1>Cotizador de licitación</h1>
+  <div class="barra">
+    <input id="codigo" placeholder="Código licitación (ej. 1000-17-LE26)" style="flex:1">
+    <label>Margen % <input id="margen" type="number" value="20" style="width:70px"></label>
+    <button onclick="mapear()">Mapear con IA</button>
+  </div>
+
+  <table id="tabla" style="display:none">
+    <thead><tr>
+      <th>Ítem licitación</th><th>Producto sugerido</th><th>Cant.</th>
+      <th>Costo</th><th>Precio unit.</th><th>Total</th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="tot" id="tot"></div>
+  <div class="barra" id="acciones" style="display:none; margin-top:1rem">
+    <button onclick="guardar()">Guardar cotización</button>
+    <button class="sec" id="btnpdf" style="display:none" onclick="descargarPDF()">Descargar PDF</button>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000";
+    const USER = "demo-user";
+    let filas = [], cotId = null;
+
+    async function mapear() {
+      const codigo = document.getElementById("codigo").value.trim();
+      const margen = document.getElementById("margen").value;
+      if (!codigo) return;
+      document.getElementById("tot").textContent = "Consultando catálogo y IA…";
+      const r = await fetch(`${API}/cotizaciones/mapear/${codigo}?margen_pct=${margen}`, { method: "POST" });
+      if (!r.ok) { document.getElementById("tot").textContent = "Error: " + (await r.text()); return; }
+      const { items_propuestos } = await r.json();
+      filas = items_propuestos;
+      render();
+    }
+
+    function render() {
+      const tb = document.getElementById("tbody");
+      tb.innerHTML = "";
+      filas.forEach((f, i) => {
+        const tr = document.createElement("tr");
+        if ((f.confianza ?? 0) < 0.5) tr.className = "low";
+        tr.innerHTML = `
+          <td>${f.descripcion}<div class="conf">ref ${f.item_lic_ref}</div></td>
+          <td>${f.producto_nombre ?? "<em>sin match</em>"}
+              <div class="conf">confianza ${(f.confianza ?? 0)} · ${f.motivo ?? ""}</div></td>
+          <td><input type="number" value="${f.cantidad}" onchange="upd(${i},'cantidad',this.value)"></td>
+          <td>${(f.costo_unitario||0).toLocaleString("es-CL")}</td>
+          <td><input type="number" value="${f.precio_unitario}" onchange="upd(${i},'precio_unitario',this.value)"></td>
+          <td class="tl">${((f.cantidad||0)*(f.precio_unitario||0)).toLocaleString("es-CL")}</td>`;
+        tb.appendChild(tr);
+      });
+      document.getElementById("tabla").style.display = "table";
+      document.getElementById("acciones").style.display = "flex";
+      total();
+    }
+
+    function upd(i, campo, val) { filas[i][campo] = parseFloat(val) || 0; render(); }
+
+    function total() {
+      const sub = filas.reduce((s, f) => s + (f.cantidad||0)*(f.precio_unitario||0), 0);
+      const iva = Math.round(sub * 0.19);
+      document.getElementById("tot").innerHTML =
+        `Subtotal: $${sub.toLocaleString("es-CL")} · IVA: $${iva.toLocaleString("es-CL")} · <b>Total: $${(sub+iva).toLocaleString("es-CL")}</b>`;
+    }
+
+    async function guardar() {
+      const codigo = document.getElementById("codigo").value.trim();
+      const body = {
+        user_id: USER, codigo_lic: codigo,
+        items: filas.map(f => ({
+          descripcion: f.descripcion, cantidad: f.cantidad, unidad: f.unidad,
+          costo_unitario: f.costo_unitario, precio_unitario: f.precio_unitario,
+          producto_id: null, item_lic_ref: f.item_lic_ref
+        }))
+      };
+      const r = await fetch(`${API}/cotizaciones`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const cot = await r.json();
+      cotId = cot.id;
+      document.getElementById("btnpdf").style.display = "inline-block";
+      alert("Cotización guardada #" + cotId);
+    }
+
+    function descargarPDF() { if (cotId) window.open(`${API}/cotizaciones/${cotId}/pdf`); }
+  </script>
+</body>
+</html>

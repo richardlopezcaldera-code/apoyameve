@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Entorno / secretos
+.env
+.env.local
+
+# Datos y artefactos
+*.pdf
+!frontend/**/*.pdf
+*.log
+
+# Postgres local (docker volume) y varios
+pgdata/
+.DS_Store

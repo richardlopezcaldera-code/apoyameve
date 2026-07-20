@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Captación de licitaciones</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #e8590c; }
+    .barra { display: flex; gap: .6rem; align-items: center; margin-bottom: 1rem; }
+    button { background: #e8590c; color: #fff; border: none; border-radius: 6px; padding: .55rem .9rem; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: .55rem; border-bottom: 1px solid #eee; font-size: .85rem; text-align: left; }
+    .score { font-weight: 700; color: #fff; border-radius: 12px; padding: .15rem .55rem; display: inline-block; }
+    .alto { background: #2b8a3e; } .medio { background: #f08c00; } .bajo { background: #adb5bd; }
+    .cierre { color: #c92a2a; font-size: .78rem; }
+    small { color: #888; }
+  </style>
+</head>
+<body>
+  <h1>🔔 Captación de licitaciones</h1>
+  <div class="barra">
+    <label>Score mínimo <input id="min" type="number" value="35" style="width:70px"></label>
+    <button onclick="cargar()">Actualizar</button>
+    <button onclick="escanear()" style="background:#333">Escanear ahora</button>
+    <span id="estado"></span>
+  </div>
+  <table>
+    <thead><tr><th>Afinidad</th><th>Oportunidad</th><th>Organismo</th><th>Monto</th><th>Cierre</th><th>Reclamos</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <script>
+    const API = "http://localhost:8000";
+    const clase = s => s >= 60 ? "alto" : s >= 40 ? "medio" : "bajo";
+
+    async function cargar() {
+      const min = document.getElementById("min").value;
+      const r = await fetch(`${API}/captacion/oportunidades?min_score=${min}`);
+      const { oportunidades } = await r.json();
+      const tb = document.getElementById("tbody");
+      tb.innerHTML = "";
+      for (const o of oportunidades) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><span class="score ${clase(o.score)}">${o.score}</span></td>
+          <td>${o.nombre}<br><small>${o.codigo} · ${(o.motivos||[]).join(", ")}</small></td>
+          <td>${o.organismo_nombre ?? ""}<br><small>${o.region ?? ""}</small></td>
+          <td>$${(o.monto_estimado ?? 0).toLocaleString("es-CL")}</td>
+          <td class="cierre">${o.fecha_cierre ?? ""}</td>
+          <td>${o.cantidad_reclamos ?? "-"}</td>`;
+        tb.appendChild(tr);
+      }
+      document.getElementById("estado").textContent = `${oportunidades.length} capturadas`;
+    }
+
+    async function escanear() {
+      document.getElementById("estado").textContent = "Escaneando Mercado Público…";
+      const r = await fetch(`${API}/captacion/escanear`, { method: "POST" });
+      const d = await r.json();
+      document.getElementById("estado").textContent = `${d.capturadas} capturadas`;
+      cargar();
+    }
+
+    cargar();
+  </script>
+</body>
+</html>

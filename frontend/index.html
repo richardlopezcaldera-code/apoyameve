@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buscador de Licitaciones</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #e8590c; }
+    .barra { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    input, button { padding: .6rem .8rem; font-size: 1rem; }
+    input { flex: 1; border: 1px solid #ccc; border-radius: 6px; }
+    button { background: #e8590c; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #eee; font-size: .9rem; }
+    tr:hover { background: #fafafa; cursor: pointer; }
+    #panel { margin-top: 1.5rem; padding: 1rem; background: #f6f6f6; border-radius: 8px; white-space: pre-wrap; display: none; }
+  </style>
+</head>
+<body>
+  <h1>Buscador de Licitaciones</h1>
+  <div class="barra">
+    <input id="q" placeholder="Buscar por nombre, producto…" />
+    <button onclick="buscar()">Buscar</button>
+  </div>
+  <table>
+    <thead><tr><th>Oportunidad</th><th>Organismo</th><th>Monto</th><th>Cierre</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div id="panel"></div>
+
+  <script>
+    // Ajusta a la URL de tu backend
+    const API = "http://localhost:8000";
+
+    async function buscar() {
+      const q = document.getElementById("q").value;
+      const r = await fetch(`${API}/oportunidades?q=${encodeURIComponent(q)}`);
+      const { resultados } = await r.json();
+      const tbody = document.getElementById("tbody");
+      tbody.innerHTML = "";
+      for (const o of resultados) {
+        const tr = document.createElement("tr");
+        tr.onclick = () => verResumen(o.codigo);
+        tr.innerHTML = `<td>${o.nombre}<br><small>${o.codigo}</small></td>
+                        <td>${o.organismo_nombre ?? ""}<br><small>${o.region ?? ""}</small></td>
+                        <td>$${(o.monto_estimado ?? 0).toLocaleString("es-CL")}</td>
+                        <td>${o.fecha_cierre ?? ""}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function verResumen(codigo) {
+      const panel = document.getElementById("panel");
+      panel.style.display = "block";
+      panel.textContent = "Analizando con IA…";
+      const r = await fetch(`${API}/ia/resumen/${codigo}`, { method: "POST" });
+      const { resumen } = await r.json();
+      panel.textContent = resumen;
+    }
+  </script>
+</body>
+</html>
