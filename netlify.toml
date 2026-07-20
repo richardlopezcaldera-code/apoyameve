@@ -1,0 +1,5 @@
+# El frontend es estático (HTML plano en frontend/); no requiere build.
+# El backend FastAPI se despliega aparte, no en Netlify.
+[build]
+  publish = "frontend"
+  command = ""
