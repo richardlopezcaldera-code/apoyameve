@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: licita
+      POSTGRES_PASSWORD: licita
+      POSTGRES_DB: licitaciones
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+volumes:
+  pgdata:
