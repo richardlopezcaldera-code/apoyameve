@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { ImageResponse } from "workers-og";
+import { zipSync } from "fflate";
 import {
   listProducts,
   listCategories,
@@ -55,6 +56,10 @@ function pngFor(product: Product, format: Format): ImageResponse {
     : new ImageResponse(squarePostHTML(product), { width: 1080, height: 1080 });
 }
 
+async function pngBytes(product: Product, format: Format): Promise<Uint8Array> {
+  return new Uint8Array(await pngFor(product, format).arrayBuffer());
+}
+
 // Imagen de un producto: /og?id=<id>&format=post|story
 app.get("/og", async (c) => {
   const id = c.req.query("id");
@@ -87,6 +92,46 @@ app.get("/catalog", async (c) => {
     return c.text(`Error armando el catálogo: ${(e as Error).message}`, 502);
   }
   return new ImageResponse(catalogHTML(products, title), { width: 1080, height: 1350 });
+});
+
+// Descarga en lote: /batch?category=<id>&format=post|story  -> .zip de PNGs
+app.get("/batch", async (c) => {
+  const format = (c.req.query("format") === "story" ? "story" : "post") as Format;
+  const cat = c.req.query("category");
+  const cr = creds(c.env);
+  let products: Product[];
+  try {
+    if (cr) {
+      products = cat ? await listProductsByCategory(cr, Number(cat)) : await listProducts(cr);
+    } else {
+      products = DEMO_LIST;
+    }
+  } catch (e) {
+    return c.text(`Error: ${(e as Error).message}`, 502);
+  }
+
+  const eligible = products.filter((p) => p.inStock || p.quotable).slice(0, 12);
+  if (!eligible.length) return c.text("No hay productos elegibles para el lote.", 404);
+
+  const files: Record<string, Uint8Array> = {};
+  for (const p of eligible) {
+    try {
+      files[`${p.permalink || p.id}-${format}.png`] = await pngBytes(p, format);
+    } catch {
+      // Si un producto falla (imagen inaccesible, etc.), se salta y sigue.
+    }
+  }
+  if (!Object.keys(files).length) {
+    return c.text("No se pudo generar ninguna pieza del lote.", 502);
+  }
+
+  const zip = zipSync(files, { level: 0 });
+  return new Response(zip, {
+    headers: {
+      "content-type": "application/zip",
+      "content-disposition": `attachment; filename="avisos-${format}.zip"`,
+    },
+  });
 });
 
 // UI
@@ -132,7 +177,10 @@ function page(
     ),
   ].join("");
 
+  const q = activeCat ? `category=${activeCat}&` : "";
   const catalogHref = activeCat ? `/catalog?category=${activeCat}` : "/catalog";
+  const batchPost = `/batch?${q}format=post`;
+  const batchStory = `/batch?${q}format=story`;
 
   return `<!doctype html>
 <html lang="es"><head>
@@ -152,7 +200,11 @@ function page(
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <div style="font-weight:700;">${sug.length ? `Sugeridos (${sug.length} en oferta/destacados)` : "Productos"}</div>
-      <a href="${catalogHref}" target="_blank" style="padding:8px 14px;background:${BRAND.colors.dark};color:#fff;border-radius:8px;text-decoration:none;font-size:14px;">Generar catálogo</a>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="${catalogHref}" target="_blank" style="padding:8px 14px;background:${BRAND.colors.dark};color:#fff;border-radius:8px;text-decoration:none;font-size:14px;">Catálogo</a>
+        <a href="${batchPost}" style="padding:8px 14px;background:#fff;border:1px solid ${BRAND.colors.dark};color:${BRAND.colors.dark};border-radius:8px;text-decoration:none;font-size:14px;">Lote posts (.zip)</a>
+        <a href="${batchStory}" style="padding:8px 14px;background:#fff;border:1px solid ${BRAND.colors.dark};color:${BRAND.colors.dark};border-radius:8px;text-decoration:none;font-size:14px;">Lote historias (.zip)</a>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;">
