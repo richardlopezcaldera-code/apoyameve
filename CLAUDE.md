@@ -84,5 +84,9 @@ setup) installed at `~/.claude/skills/gstack`. Invoke any tool below with `/<nam
 - `/gstack-upgrade` — Upgrade gstack to the latest version.
 
 > Note: browser tools rely on Chromium. The gstack `./setup` browser download is
-> blocked by this environment's network policy, but Chromium is pre-installed
-> (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`).
+> blocked by this environment's network policy, so gstack is pointed at the
+> pre-installed Chromium instead via `GSTACK_CHROMIUM_PATH=/opt/pw-browsers/chromium`
+> (exported in the shell profile). With that set, the browser launches and runs.
+> Reaching public websites is still limited by the environment's outbound network
+> policy (the egress gateway returns 403 for non-allowlisted hosts), which affects
+> `/browse`, `/qa`, `/scrape`, and `/design-review` against arbitrary sites.
