@@ -1,0 +1,4 @@
+# Copiá este archivo como .dev.vars (no se commitea) para desarrollo local.
+# Los valores salen de tu panel de Jumpseller: Cuenta -> API.
+JUMPSELLER_LOGIN=tu-login-de-api
+JUMPSELLER_AUTHTOKEN=tu-authtoken-de-api

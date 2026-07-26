@@ -1,0 +1,9 @@
+name = "mobiliariotech-avisos"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (no se commitean). Cargarlos con:
+#   npx wrangler secret put JUMPSELLER_LOGIN
+#   npx wrangler secret put JUMPSELLER_AUTHTOKEN
+# En local, ponerlos en .dev.vars (ver .dev.vars.example).
