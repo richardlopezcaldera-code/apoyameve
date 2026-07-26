@@ -15,8 +15,11 @@ export type Product = {
   category: string | null;
   inStock: boolean;
   quotable: boolean;
+  featured: boolean;
   permalink: string;
 };
+
+export type Category = { id: number; name: string };
 
 type RawImage = { url: string; position: number };
 type RawCategory = { id: number; name: string };
@@ -30,6 +33,7 @@ type RawProduct = {
   stock: number | null;
   stock_unlimited: boolean;
   quotable: boolean;
+  featured: boolean;
   permalink: string;
   images: RawImage[];
   categories: RawCategory[];
@@ -53,6 +57,7 @@ function normalize(raw: RawProduct): Product {
     category: raw.categories?.[0]?.name ?? null,
     inStock: raw.status === "available" && inStock,
     quotable: Boolean(raw.quotable),
+    featured: Boolean(raw.featured),
     permalink: raw.permalink,
   };
 }
@@ -77,4 +82,31 @@ export async function getProduct(creds: Credentials, id: number): Promise<Produc
     `${API}/products/${id}.json?${auth(creds)}`,
   );
   return normalize(data.product);
+}
+
+export async function listCategories(creds: Credentials): Promise<Category[]> {
+  const data = await getJSON<{ category: RawCategory }[]>(
+    `${API}/categories.json?${auth(creds)}`,
+  );
+  return data.map((d) => ({ id: d.category.id, name: d.category.name }));
+}
+
+export async function listProductsByCategory(
+  creds: Credentials,
+  categoryId: number,
+  limit = 50,
+): Promise<Product[]> {
+  const data = await getJSON<{ product: RawProduct }[]>(
+    `${API}/categories/${categoryId}/products.json?${auth(creds, { limit: String(limit) })}`,
+  );
+  return data.map((d) => normalize(d.product));
+}
+
+// Sugeridos: en oferta o destacados, y elegibles (con stock o cotizables).
+export function suggested(products: Product[]): Product[] {
+  return products.filter(
+    (p) =>
+      (p.inStock || p.quotable) &&
+      (p.featured || (p.compareAtPrice != null && p.compareAtPrice > p.price)),
+  );
 }

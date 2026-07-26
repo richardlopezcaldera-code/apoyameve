@@ -1,7 +1,16 @@
 import { Hono } from "hono";
 import { ImageResponse } from "workers-og";
-import { listProducts, getProduct, type Product, type Credentials } from "../lib/jumpseller";
-import { squarePostHTML } from "../lib/template";
+import {
+  listProducts,
+  listCategories,
+  listProductsByCategory,
+  getProduct,
+  suggested,
+  type Product,
+  type Category,
+  type Credentials,
+} from "../lib/jumpseller";
+import { squarePostHTML, storyHTML, catalogHTML, type Format } from "../lib/template";
 import { BRAND } from "../lib/brand";
 import { formatCLP } from "../lib/format";
 
@@ -12,7 +21,7 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Producto de demostración: permite ver la plantilla antes de cargar el token.
+// Datos de demostración para ver las plantillas sin token configurado.
 const DEMO: Product = {
   id: 0,
   name: "Sillón de Oficina KM 5050",
@@ -24,8 +33,14 @@ const DEMO: Product = {
   category: "Sillas",
   inStock: true,
   quotable: false,
+  featured: true,
   permalink: "sillon-de-oficina-km-5050",
 };
+const DEMO_LIST: Product[] = [
+  DEMO,
+  { ...DEMO, id: 1, name: "Silla Ergonómica KM 3035", price: 42990, compareAtPrice: 59990 },
+  { ...DEMO, id: 2, name: "Escritorio Home Office", price: 89990, compareAtPrice: null, featured: false },
+];
 
 function creds(env: Bindings): Credentials | null {
   if (env.JUMPSELLER_LOGIN && env.JUMPSELLER_AUTHTOKEN) {
@@ -34,9 +49,16 @@ function creds(env: Bindings): Credentials | null {
   return null;
 }
 
-// Imagen del aviso (post cuadrado 1080x1080).
+function pngFor(product: Product, format: Format): ImageResponse {
+  return format === "story"
+    ? new ImageResponse(storyHTML(product), { width: 1080, height: 1920 })
+    : new ImageResponse(squarePostHTML(product), { width: 1080, height: 1080 });
+}
+
+// Imagen de un producto: /og?id=<id>&format=post|story
 app.get("/og", async (c) => {
   const id = c.req.query("id");
+  const format = (c.req.query("format") === "story" ? "story" : "post") as Format;
   const cr = creds(c.env);
   let product: Product;
   try {
@@ -44,57 +66,73 @@ app.get("/og", async (c) => {
   } catch (e) {
     return c.text(`Error trayendo el producto: ${(e as Error).message}`, 502);
   }
-  return new ImageResponse(squarePostHTML(product), { width: 1080, height: 1080 });
+  return pngFor(product, format);
 });
 
-// UI: elegir un producto y ver / descargar su aviso.
+// Catálogo (varios productos): /catalog?category=<id>
+app.get("/catalog", async (c) => {
+  const cr = creds(c.env);
+  const cat = c.req.query("category");
+  let products: Product[];
+  let title = "Ofertas";
+  try {
+    if (cr) {
+      products = cat ? await listProductsByCategory(cr, Number(cat)) : await listProducts(cr);
+      const sug = suggested(products);
+      products = (sug.length ? sug : products).filter((p) => p.inStock || p.quotable);
+    } else {
+      products = DEMO_LIST;
+    }
+  } catch (e) {
+    return c.text(`Error armando el catálogo: ${(e as Error).message}`, 502);
+  }
+  return new ImageResponse(catalogHTML(products, title), { width: 1080, height: 1350 });
+});
+
+// UI
 app.get("/", async (c) => {
   const cr = creds(c.env);
+  const cat = c.req.query("category");
   let products: Product[] = [];
+  let categories: Category[] = [];
   let notice = "";
 
   if (cr) {
     try {
-      products = await listProducts(cr, 50);
+      [products, categories] = await Promise.all([
+        cat ? listProductsByCategory(cr, Number(cat)) : listProducts(cr, 50),
+        listCategories(cr),
+      ]);
     } catch (e) {
-      notice = `No se pudieron traer los productos: ${(e as Error).message}`;
+      notice = `No se pudieron traer los datos: ${(e as Error).message}`;
     }
   } else {
     notice =
-      "Todavía no está configurado el token de Jumpseller. Se muestra un producto de demostración. " +
+      "Todavía no está configurado el token de Jumpseller. Se muestran datos de demostración. " +
       "Cargá los secretos JUMPSELLER_LOGIN y JUMPSELLER_AUTHTOKEN para ver tu catálogo real.";
-    products = [DEMO];
+    products = DEMO_LIST;
   }
 
-  return c.html(page(products, notice));
+  return c.html(page(products, categories, notice, cat));
 });
 
-function page(products: Product[], notice: string): string {
-  const cards = products
-    .map((p) => {
-      const eligible = p.inStock || p.quotable;
-      const price = p.quotable ? "Consultar precio" : formatCLP(p.price);
-      const badge = !p.inStock && !p.quotable
-        ? `<span style="color:#e11d48;font-weight:700;">Sin stock</span>`
-        : `<span style="color:#334155;">${price}</span>`;
-      const action = eligible
-        ? `<a href="/og?id=${p.id}" target="_blank" style="display:inline-block;margin-top:10px;padding:8px 14px;background:${BRAND.colors.primary};color:#fff;border-radius:8px;text-decoration:none;font-size:14px;">Ver aviso</a>`
-        : `<span style="display:inline-block;margin-top:10px;font-size:13px;color:#94a3b8;">No elegible (sin stock)</span>`;
-      const img = p.imageUrl
-        ? `<img src="${p.imageUrl}" style="width:100%;height:150px;object-fit:contain;background:#f8fafc;border-radius:8px;" />`
-        : `<div style="height:150px;background:#f1f5f9;border-radius:8px;"></div>`;
-      return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
-        ${img}
-        <div style="margin-top:10px;font-weight:600;font-size:15px;line-height:1.3;">${p.name}</div>
-        <div style="margin-top:6px;font-size:14px;">${badge}</div>
-        ${action}
-      </div>`;
-    })
-    .join("");
+function page(
+  products: Product[],
+  categories: Category[],
+  notice: string,
+  activeCat?: string,
+): string {
+  const sug = suggested(products);
 
-  const noticeHTML = notice
-    ? `<div style="background:#fef9c3;border:1px solid #fde047;color:#713f12;padding:12px 16px;border-radius:10px;margin-bottom:20px;font-size:14px;">${notice}</div>`
-    : "";
+  const catLinks = [
+    `<a href="/" style="${chip(!activeCat)}">Todos</a>`,
+    ...categories.map(
+      (cat) =>
+        `<a href="/?category=${cat.id}" style="${chip(activeCat === String(cat.id))}">${cat.name}</a>`,
+    ),
+  ].join("");
+
+  const catalogHref = activeCat ? `/catalog?category=${activeCat}` : "/catalog";
 
   return `<!doctype html>
 <html lang="es"><head>
@@ -105,15 +143,53 @@ function page(products: Product[], notice: string): string {
 <body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f4f5;color:#18181b;">
   <header style="background:${BRAND.colors.primary};color:#fff;padding:20px 24px;">
     <div style="font-size:20px;font-weight:800;">Generador de avisos · ${BRAND.name}</div>
-    <div style="font-size:13px;opacity:.9;">Elegí un producto y generá su pieza para redes (1080×1080).</div>
+    <div style="font-size:13px;opacity:.9;">Elegí un producto y generá su pieza (post, historia o catálogo).</div>
   </header>
-  <main style="max-width:1000px;margin:0 auto;padding:24px;">
-    ${noticeHTML}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
-      ${cards}
+  <main style="max-width:1040px;margin:0 auto;padding:24px;">
+    ${notice ? `<div style="background:#fef9c3;border:1px solid #fde047;color:#713f12;padding:12px 16px;border-radius:10px;margin-bottom:20px;font-size:14px;">${notice}</div>` : ""}
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${catLinks}</div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-weight:700;">${sug.length ? `Sugeridos (${sug.length} en oferta/destacados)` : "Productos"}</div>
+      <a href="${catalogHref}" target="_blank" style="padding:8px 14px;background:${BRAND.colors.dark};color:#fff;border-radius:8px;text-decoration:none;font-size:14px;">Generar catálogo</a>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;">
+      ${products.map(card).join("")}
     </div>
   </main>
 </body></html>`;
+}
+
+function chip(active: boolean): string {
+  return active
+    ? `display:inline-block;padding:7px 14px;border-radius:999px;background:${BRAND.colors.primary};color:#fff;text-decoration:none;font-size:13px;font-weight:600;`
+    : `display:inline-block;padding:7px 14px;border-radius:999px;background:#fff;border:1px solid #e2e8f0;color:#334155;text-decoration:none;font-size:13px;`;
+}
+
+function card(p: Product): string {
+  const eligible = p.inStock || p.quotable;
+  const price = p.quotable ? "Consultar precio" : formatCLP(p.price);
+  const onSale = p.compareAtPrice != null && p.compareAtPrice > p.price;
+  const status = !eligible
+    ? `<span style="color:#e11d48;font-weight:700;">Sin stock</span>`
+    : `<span style="color:#334155;">${price}</span>${onSale ? ` <span style="color:#e11d48;font-weight:700;">OFERTA</span>` : ""}`;
+  const img = p.imageUrl
+    ? `<img src="${p.imageUrl}" style="width:100%;height:150px;object-fit:contain;background:#f8fafc;border-radius:8px;" />`
+    : `<div style="height:150px;background:#f1f5f9;border-radius:8px;"></div>`;
+  const actions = eligible
+    ? `<div style="display:flex;gap:8px;margin-top:10px;">
+         <a href="/og?id=${p.id}&format=post" target="_blank" style="flex:1;text-align:center;padding:8px;background:${BRAND.colors.primary};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;">Post</a>
+         <a href="/og?id=${p.id}&format=story" target="_blank" style="flex:1;text-align:center;padding:8px;background:#fff;border:1px solid ${BRAND.colors.primary};color:${BRAND.colors.primary};border-radius:8px;text-decoration:none;font-size:13px;">Historia</a>
+       </div>`
+    : `<div style="margin-top:10px;font-size:13px;color:#94a3b8;">No elegible (sin stock)</div>`;
+  return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
+    ${img}
+    <div style="margin-top:10px;font-weight:600;font-size:15px;line-height:1.3;">${p.name}</div>
+    <div style="margin-top:6px;font-size:14px;">${status}</div>
+    ${actions}
+  </div>`;
 }
 
 export default app;
