@@ -12,7 +12,10 @@ IG_ACCESS_TOKEN=
 FB_PAGE_ID=
 FB_PAGE_TOKEN=
 
-# URL pública del Worker (Meta descarga la imagen desde acá).
+# ── TikTok (Content Posting API) ──
+TIKTOK_ACCESS_TOKEN=
+
+# URL pública del Worker (Meta/TikTok descargan la imagen desde acá).
 PUBLIC_BASE_URL=
 
 # Protege el disparo manual /run-now (elegí una clave cualquiera).

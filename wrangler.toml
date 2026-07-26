@@ -16,6 +16,7 @@ crons = ["0 13 * * *", "0 17 * * *", "0 23 * * *"]
 #   npx wrangler secret put IG_ACCESS_TOKEN
 #   npx wrangler secret put FB_PAGE_ID
 #   npx wrangler secret put FB_PAGE_TOKEN
+#   npx wrangler secret put TIKTOK_ACCESS_TOKEN
 # En local usar .dev.vars (ver .dev.vars.example).
 
 # ── Variables públicas ──

@@ -17,7 +17,7 @@ import { formatCLP } from "../lib/format";
 import { homeHTML } from "./home";
 import { pickForIndex } from "../lib/schedule";
 import { caption } from "../lib/caption";
-import { publishInstagram, publishFacebook, type PublishResult } from "../lib/publish";
+import { publishInstagram, publishFacebook, publishTikTok, type PublishResult } from "../lib/publish";
 
 type Bindings = {
   JUMPSELLER_LOGIN?: string;
@@ -27,6 +27,7 @@ type Bindings = {
   IG_ACCESS_TOKEN?: string;
   FB_PAGE_ID?: string;
   FB_PAGE_TOKEN?: string;
+  TIKTOK_ACCESS_TOKEN?: string;
   PUBLIC_BASE_URL?: string;
   RUN_TOKEN?: string;
   ADS_KV?: KVNamespace;
@@ -302,6 +303,9 @@ async function runScheduled(env: Bindings): Promise<QueueEntry | null> {
   }
   if (imageUrl && env.FB_PAGE_ID && env.FB_PAGE_TOKEN) {
     results.push(await publishFacebook(env.FB_PAGE_ID, env.FB_PAGE_TOKEN, imageUrl, cap));
+  }
+  if (imageUrl && env.TIKTOK_ACCESS_TOKEN) {
+    results.push(await publishTikTok(env.TIKTOK_ACCESS_TOKEN, imageUrl, product.name));
   }
 
   const entry: QueueEntry = {

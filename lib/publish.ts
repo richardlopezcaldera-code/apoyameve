@@ -39,6 +39,48 @@ export async function publishInstagram(
   }
 }
 
+// TikTok: publicar una foto vía Content Posting API (PULL_FROM_URL, Direct Post).
+// Requiere access token con scope de publicación y el dominio verificado en el
+// portal de TikTok para que acepte descargar la imagen desde PUBLIC_BASE_URL.
+export async function publishTikTok(
+  token: string,
+  imageUrl: string,
+  title: string,
+): Promise<PublishResult> {
+  try {
+    const res = await fetch("https://open.tiktokapis.com/v2/post/publish/content/init/", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        post_info: {
+          title: title.slice(0, 90),
+          privacy_level: "PUBLIC_TO_EVERYONE",
+          disable_comment: false,
+        },
+        source_info: {
+          source: "PULL_FROM_URL",
+          photo_cover_index: 0,
+          photo_images: [imageUrl],
+        },
+        post_mode: "DIRECT_POST",
+        media_type: "PHOTO",
+      }),
+    });
+    const j = (await res.json()) as {
+      data?: { publish_id?: string };
+      error?: { code?: string; message?: string };
+    };
+    const ok = res.ok && j.error?.code === "ok" && !!j.data?.publish_id;
+    return {
+      platform: "tiktok",
+      ok,
+      detail: j.data?.publish_id ?? j.error?.message ?? "falló init",
+    };
+  } catch (e) {
+    return { platform: "tiktok", ok: false, detail: (e as Error).message };
+  }
+}
+
 // Facebook: publicar una foto en una Página.
 export async function publishFacebook(
   pageId: string,
