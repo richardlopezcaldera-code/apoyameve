@@ -3,7 +3,29 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# Secrets (no se commitean). Cargarlos con:
+# Publicación automática 3 veces al día (horas UTC).
+# 13:00, 17:00 y 23:00 UTC ≈ 10:00, 14:00 y 20:00 en Chile (UTC-3).
+[triggers]
+crons = ["0 13 * * *", "0 17 * * *", "0 23 * * *"]
+
+# ── Secrets (no se commitean) ──
 #   npx wrangler secret put JUMPSELLER_LOGIN
 #   npx wrangler secret put JUMPSELLER_AUTHTOKEN
-# En local, ponerlos en .dev.vars (ver .dev.vars.example).
+# Para publicar en Meta (Etapa B), cuando tengas la app aprobada:
+#   npx wrangler secret put IG_USER_ID
+#   npx wrangler secret put IG_ACCESS_TOKEN
+#   npx wrangler secret put FB_PAGE_ID
+#   npx wrangler secret put FB_PAGE_TOKEN
+# En local usar .dev.vars (ver .dev.vars.example).
+
+# ── Variables públicas ──
+# PUBLIC_BASE_URL: URL pública del Worker (Meta descarga la imagen desde ahí).
+[vars]
+PUBLIC_BASE_URL = ""
+
+# ── Cola/rotación (opcional pero recomendado) ──
+# Crear con:  npx wrangler kv namespace create ADS_KV
+# y pegar el id devuelto acá, descomentando:
+# [[kv_namespaces]]
+# binding = "ADS_KV"
+# id = "<pegar-id>"

@@ -15,10 +15,31 @@ import { squarePostHTML, storyHTML, catalogHTML, type Format } from "../lib/temp
 import { BRAND } from "../lib/brand";
 import { formatCLP } from "../lib/format";
 import { homeHTML } from "./home";
+import { pickForIndex } from "../lib/schedule";
+import { caption } from "../lib/caption";
+import { publishInstagram, publishFacebook, type PublishResult } from "../lib/publish";
 
 type Bindings = {
   JUMPSELLER_LOGIN?: string;
   JUMPSELLER_AUTHTOKEN?: string;
+  // Meta (Etapa B) — opcionales hasta tener la app aprobada.
+  IG_USER_ID?: string;
+  IG_ACCESS_TOKEN?: string;
+  FB_PAGE_ID?: string;
+  FB_PAGE_TOKEN?: string;
+  PUBLIC_BASE_URL?: string;
+  RUN_TOKEN?: string;
+  ADS_KV?: KVNamespace;
+};
+
+type QueueEntry = {
+  ts: string;
+  productId: number;
+  name: string;
+  imageUrl: string | null;
+  caption: string;
+  posted: boolean;
+  results: PublishResult[];
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -251,4 +272,94 @@ function card(p: Product): string {
   </div>`;
 }
 
-export default app;
+// ── Motor de publicación automática (Etapa A) ──
+// Elige un producto elegible (rotando), genera la pieza y la publica en Meta si
+// hay tokens; si no, la deja en cola. Registra el resultado en KV (si existe).
+async function runScheduled(env: Bindings): Promise<QueueEntry | null> {
+  const cr = creds(env);
+  if (!cr) {
+    console.log("[cron] sin credenciales de Jumpseller; nada que publicar");
+    return null;
+  }
+
+  const products = await listProducts(cr, 100);
+  let cursor = 0;
+  if (env.ADS_KV) cursor = Number(await env.ADS_KV.get("cursor")) || 0;
+  const product = pickForIndex(products, cursor);
+  if (!product) {
+    console.log("[cron] no hay productos elegibles");
+    return null;
+  }
+  if (env.ADS_KV) await env.ADS_KV.put("cursor", String(cursor + 1));
+
+  const base = env.PUBLIC_BASE_URL?.replace(/\/$/, "");
+  const imageUrl = base ? `${base}/og?id=${product.id}&format=post` : null;
+  const cap = caption(product);
+
+  const results: PublishResult[] = [];
+  if (imageUrl && env.IG_USER_ID && env.IG_ACCESS_TOKEN) {
+    results.push(await publishInstagram(env.IG_USER_ID, env.IG_ACCESS_TOKEN, imageUrl, cap));
+  }
+  if (imageUrl && env.FB_PAGE_ID && env.FB_PAGE_TOKEN) {
+    results.push(await publishFacebook(env.FB_PAGE_ID, env.FB_PAGE_TOKEN, imageUrl, cap));
+  }
+
+  const entry: QueueEntry = {
+    ts: new Date().toISOString(),
+    productId: product.id,
+    name: product.name,
+    imageUrl,
+    caption: cap,
+    posted: results.length > 0 && results.some((r) => r.ok),
+    results,
+  };
+
+  if (env.ADS_KV) {
+    const prev = JSON.parse((await env.ADS_KV.get("queue")) || "[]") as QueueEntry[];
+    prev.unshift(entry);
+    await env.ADS_KV.put("queue", JSON.stringify(prev.slice(0, 60)));
+  }
+  console.log(`[cron] ${entry.posted ? "publicado" : "en cola"}: ${product.name}`);
+  return entry;
+}
+
+// Ver la cola / historial de publicaciones.
+app.get("/queue", async (c) => {
+  if (!c.env.ADS_KV) {
+    return c.html(
+      `<p style="font-family:system-ui;padding:24px">La cola usa Cloudflare KV, que todavía no está configurado. Creá el namespace con <code>wrangler kv namespace create ADS_KV</code> y agregá el binding en <code>wrangler.toml</code>.</p>`,
+    );
+  }
+  const list = JSON.parse((await c.env.ADS_KV.get("queue")) || "[]") as QueueEntry[];
+  const rows = list
+    .map(
+      (e) =>
+        `<tr><td>${e.ts.replace("T", " ").slice(0, 16)}</td><td>${e.name}</td><td>${e.posted ? "✅ publicado" : "🕓 en cola"}</td><td>${e.results.map((r) => `${r.platform}:${r.ok ? "ok" : r.detail}`).join("<br>") || "—"}</td></tr>`,
+    )
+    .join("");
+  return c.html(
+    `<!doctype html><meta charset="utf-8"><title>Cola de publicaciones</title>
+     <body style="font-family:system-ui;padding:24px;max-width:900px;margin:auto">
+     <h2>Cola de publicaciones · ${BRAND.name}</h2>
+     <p><a href="/generador">← Generador</a></p>
+     <table style="border-collapse:collapse;width:100%" border="1" cellpadding="8">
+     <tr><th>Fecha (UTC)</th><th>Producto</th><th>Estado</th><th>Detalle</th></tr>${rows || `<tr><td colspan=4>Sin registros todavía.</td></tr>`}</table></body>`,
+  );
+});
+
+// Disparo manual para probar (guardado con RUN_TOKEN si está definido).
+app.get("/run-now", async (c) => {
+  if (c.env.RUN_TOKEN && c.req.query("token") !== c.env.RUN_TOKEN) {
+    return c.text("No autorizado.", 401);
+  }
+  const entry = await runScheduled(c.env);
+  return c.json(entry ?? { skipped: true });
+});
+
+export default {
+  fetch: app.fetch,
+  // Cloudflare invoca esto según los crons de wrangler.toml (3 veces al día).
+  scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduled(env));
+  },
+};
