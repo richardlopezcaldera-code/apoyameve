@@ -14,6 +14,7 @@ import {
 import { squarePostHTML, storyHTML, catalogHTML, type Format } from "../lib/template";
 import { BRAND } from "../lib/brand";
 import { formatCLP } from "../lib/format";
+import { homeHTML } from "./home";
 
 type Bindings = {
   JUMPSELLER_LOGIN?: string;
@@ -134,8 +135,11 @@ app.get("/batch", async (c) => {
   });
 });
 
-// UI
-app.get("/", async (c) => {
+// Home pública (estilo aprobado)
+app.get("/", (c) => c.html(homeHTML()));
+
+// Generador de avisos (herramienta interna)
+app.get("/generador", async (c) => {
   const cr = creds(c.env);
   const cat = c.req.query("category");
   let products: Product[] = [];
@@ -170,10 +174,10 @@ function page(
   const sug = suggested(products);
 
   const catLinks = [
-    `<a href="/" style="${chip(!activeCat)}">Todos</a>`,
+    `<a href="/generador" style="${chip(!activeCat)}">Todos</a>`,
     ...categories.map(
       (cat) =>
-        `<a href="/?category=${cat.id}" style="${chip(activeCat === String(cat.id))}">${cat.name}</a>`,
+        `<a href="/generador?category=${cat.id}" style="${chip(activeCat === String(cat.id))}">${cat.name}</a>`,
     ),
   ].join("");
 
@@ -190,7 +194,10 @@ function page(
 </head>
 <body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f4f5;color:#18181b;">
   <header style="background:${BRAND.colors.primary};color:#fff;padding:20px 24px;">
-    <div style="font-size:20px;font-weight:800;">Generador de avisos · ${BRAND.name}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:20px;font-weight:800;">Generador de avisos · ${BRAND.name}</div>
+      <a href="/" style="color:#fff;font-size:13px;text-decoration:underline;">← Volver al inicio</a>
+    </div>
     <div style="font-size:13px;opacity:.9;">Elegí un producto y generá su pieza (post, historia o catálogo).</div>
   </header>
   <main style="max-width:1040px;margin:0 auto;padding:24px;">
