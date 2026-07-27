@@ -1,0 +1,29 @@
+# Copiá este archivo como .dev.vars (no se commitea) para desarrollo local.
+
+# ── Jumpseller (obligatorio) ──
+# Panel de Jumpseller -> Cuenta -> API
+JUMPSELLER_LOGIN=tu-login-de-api
+JUMPSELLER_AUTHTOKEN=tu-authtoken-de-api
+
+# ── Meta / redes (Etapa B) ──
+# Ver la guía en docs/SETUP-REDES.md para obtener cada valor.
+IG_USER_ID=
+IG_ACCESS_TOKEN=
+FB_PAGE_ID=
+FB_PAGE_TOKEN=
+
+# ── TikTok (Content Posting API) ──
+TIKTOK_ACCESS_TOKEN=
+
+# ── Metricool (integrador único IG+FB+TikTok, camino principal) ──
+# El token sale de tu perfil de Metricool (plan con acceso API).
+METRICOOL_USER_TOKEN=
+METRICOOL_USER_ID=5097551
+METRICOOL_BLOG_ID=6621202
+METRICOOL_NETWORKS=instagram,facebook,tiktok
+
+# URL pública del Worker (Metricool/Meta/TikTok descargan la imagen desde acá).
+PUBLIC_BASE_URL=
+
+# Protege el disparo manual /run-now (elegí una clave cualquiera).
+RUN_TOKEN=

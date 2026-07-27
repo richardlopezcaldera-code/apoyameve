@@ -1,0 +1,38 @@
+name = "mobiliariotech-avisos"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Publicación automática 3 veces al día (horas UTC).
+# 13:00, 17:00 y 23:00 UTC ≈ 10:00, 14:00 y 20:00 en Chile (UTC-3).
+[triggers]
+crons = ["0 13 * * *", "0 17 * * *", "0 23 * * *"]
+
+# ── Secrets (no se commitean) ──
+#   npx wrangler secret put JUMPSELLER_LOGIN
+#   npx wrangler secret put JUMPSELLER_AUTHTOKEN
+# Para publicar en Meta (Etapa B), cuando tengas la app aprobada:
+#   npx wrangler secret put IG_USER_ID
+#   npx wrangler secret put IG_ACCESS_TOKEN
+#   npx wrangler secret put FB_PAGE_ID
+#   npx wrangler secret put FB_PAGE_TOKEN
+#   npx wrangler secret put TIKTOK_ACCESS_TOKEN
+# En local usar .dev.vars (ver .dev.vars.example).
+
+# Metricool (integrador único). El token va como secret:
+#   npx wrangler secret put METRICOOL_USER_TOKEN
+
+# ── Variables públicas ──
+# PUBLIC_BASE_URL: URL pública del Worker (las redes descargan la imagen de ahí).
+[vars]
+PUBLIC_BASE_URL = ""
+METRICOOL_USER_ID = "5097551"
+METRICOOL_BLOG_ID = "6621202"
+METRICOOL_NETWORKS = "instagram,facebook,tiktok"
+
+# ── Cola/rotación (opcional pero recomendado) ──
+# Crear con:  npx wrangler kv namespace create ADS_KV
+# y pegar el id devuelto acá, descomentando:
+# [[kv_namespaces]]
+# binding = "ADS_KV"
+# id = "<pegar-id>"
