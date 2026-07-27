@@ -1,5 +1,5 @@
 ---
-name: optimizador-catalogo-jumpseller
+name: mtc
 description: >-
   Audita y optimiza el catálogo de productos de la tienda Jumpseller de Kamiana
   (mobiliario de oficina, mobiliario tech y equipamiento). Genera un INFORME de
@@ -14,7 +14,7 @@ description: >-
   así que optimizar el catálogo mejora las tres a la vez.
 ---
 
-# Optimizador de Catálogo Jumpseller (Kamiana / MobiliarioTech)
+# MTC — Optimizador de Catálogo Jumpseller (Kamiana / MobiliarioTech)
 
 ## Qué hace
 
