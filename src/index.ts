@@ -15,6 +15,7 @@ import { squarePostHTML, storyHTML, catalogHTML, type Format } from "../lib/temp
 import { BRAND } from "../lib/brand";
 import { formatCLP } from "../lib/format";
 import { homeHTML } from "./home";
+import { reelHTML } from "./reel";
 import { pickForIndex } from "../lib/schedule";
 import { caption } from "../lib/caption";
 import { publishInstagram, publishFacebook, publishTikTok, type PublishResult } from "../lib/publish";
@@ -128,6 +129,42 @@ app.get("/og", async (c) => {
     product = fallbackProduct(id);
   }
   return pngFor(product, format);
+});
+
+// Proxy de la foto del producto, same-origin, para que el canvas del Reel no
+// quede "tainted" (y se pueda grabar). El Worker sí puede leer el CDN de Jumpseller.
+app.get("/img", async (c) => {
+  const id = c.req.query("id");
+  const cr = creds(c.env);
+  let product: Product;
+  try {
+    product = id && cr ? await getProduct(cr, Number(id)) : fallbackProduct(id);
+  } catch {
+    product = fallbackProduct(id);
+  }
+  if (!product.imageUrl) return c.text("El producto no tiene foto.", 404);
+  const upstream = await fetch(product.imageUrl, { cf: { cacheTtl: 3600 } } as RequestInit);
+  if (!upstream.ok) return c.text("No se pudo cargar la foto.", 502);
+  return new Response(upstream.body, {
+    headers: {
+      "content-type": upstream.headers.get("content-type") || "image/jpeg",
+      "cache-control": "public, max-age=3600",
+      "access-control-allow-origin": "*",
+    },
+  });
+});
+
+// Video (Reel/TikTok/Historia) del producto: /reel?id=<id>
+app.get("/reel", async (c) => {
+  const id = c.req.query("id");
+  const cr = creds(c.env);
+  let product: Product;
+  try {
+    product = id && cr ? await getProduct(cr, Number(id)) : fallbackProduct(id);
+  } catch {
+    product = fallbackProduct(id);
+  }
+  return c.html(reelHTML(product));
 });
 
 // Catálogo (varios productos): /catalog?category=<id>
@@ -292,7 +329,8 @@ function card(p: Product): string {
     ? `<div style="display:flex;gap:8px;margin-top:10px;">
          <a href="/og?id=${p.id}&format=post" target="_blank" style="flex:1;text-align:center;padding:8px;background:${BRAND.colors.primary};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;">Post</a>
          <a href="/og?id=${p.id}&format=story" target="_blank" style="flex:1;text-align:center;padding:8px;background:#fff;border:1px solid ${BRAND.colors.primary};color:${BRAND.colors.primary};border-radius:8px;text-decoration:none;font-size:13px;">Historia</a>
-       </div>`
+       </div>
+       <a href="/reel?id=${p.id}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:8px;background:${BRAND.colors.sale};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">🎬 Reel con música</a>`
     : `<div style="margin-top:10px;font-size:13px;color:#94a3b8;">No elegible (sin stock)</div>`;
   return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
     ${img}
