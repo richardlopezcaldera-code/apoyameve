@@ -15,10 +15,12 @@ import { squarePostHTML, storyHTML, catalogHTML, type Format } from "../lib/temp
 import { BRAND } from "../lib/brand";
 import { formatCLP } from "../lib/format";
 import { homeHTML } from "./home";
+import { reelHTML } from "./reel";
 import { pickForIndex } from "../lib/schedule";
 import { caption } from "../lib/caption";
 import { publishInstagram, publishFacebook, publishTikTok, type PublishResult } from "../lib/publish";
 import { publishViaMetricool } from "../lib/metricool";
+import { FALLBACK_PRODUCTS } from "../lib/fallback-products";
 
 type Bindings = {
   JUMPSELLER_LOGIN?: string;
@@ -66,17 +68,42 @@ const DEMO: Product = {
   featured: true,
   permalink: "sillon-de-oficina-km-5050",
 };
-const DEMO_LIST: Product[] = [
-  DEMO,
-  { ...DEMO, id: 1, name: "Silla Ergonómica KM 3035", price: 42990, compareAtPrice: 59990 },
-  { ...DEMO, id: 2, name: "Escritorio Home Office", price: 89990, compareAtPrice: null, featured: false },
-];
-
 function creds(env: Bindings): Credentials | null {
   if (env.JUMPSELLER_LOGIN && env.JUMPSELLER_AUTHTOKEN) {
     return { login: env.JUMPSELLER_LOGIN, authtoken: env.JUMPSELLER_AUTHTOKEN };
   }
   return null;
+}
+
+// Aviso cuando se usa el catálogo de respaldo (API caída o credenciales inválidas).
+const FALLBACK_NOTICE =
+  "No pudimos conectar con Jumpseller en vivo. Revisá los secretos JUMPSELLER_LOGIN y " +
+  "JUMPSELLER_AUTHTOKEN en Cloudflare (deben ser el Login y Auth Token de la API, no el " +
+  "nombre de la app). Mientras tanto se muestra tu catálogo guardado, con productos y fotos reales.";
+
+// Un producto del respaldo por id (o el primero) para no dejar /og sin nada.
+function fallbackProduct(id?: string): Product {
+  if (id) {
+    const found = FALLBACK_PRODUCTS.find((p) => p.id === Number(id));
+    if (found) return found;
+  }
+  return FALLBACK_PRODUCTS[0] ?? DEMO;
+}
+
+// Lista con resiliencia: intenta la API; si falla, usa el catálogo de respaldo real.
+async function listOrFallback(
+  cr: Credentials,
+  cat: string | undefined,
+  limit = 50,
+): Promise<{ products: Product[]; usingFallback: boolean }> {
+  try {
+    const products = cat
+      ? await listProductsByCategory(cr, Number(cat))
+      : await listProducts(cr, limit);
+    return { products, usingFallback: false };
+  } catch {
+    return { products: FALLBACK_PRODUCTS, usingFallback: true };
+  }
 }
 
 function pngFor(product: Product, format: Format): ImageResponse {
@@ -96,11 +123,48 @@ app.get("/og", async (c) => {
   const cr = creds(c.env);
   let product: Product;
   try {
-    product = id && cr ? await getProduct(cr, Number(id)) : DEMO;
-  } catch (e) {
-    return c.text(`Error trayendo el producto: ${(e as Error).message}`, 502);
+    product = id && cr ? await getProduct(cr, Number(id)) : fallbackProduct(id);
+  } catch {
+    // Si la API falla, generamos la pieza con la foto real del catálogo de respaldo.
+    product = fallbackProduct(id);
   }
   return pngFor(product, format);
+});
+
+// Proxy de la foto del producto, same-origin, para que el canvas del Reel no
+// quede "tainted" (y se pueda grabar). El Worker sí puede leer el CDN de Jumpseller.
+app.get("/img", async (c) => {
+  const id = c.req.query("id");
+  const cr = creds(c.env);
+  let product: Product;
+  try {
+    product = id && cr ? await getProduct(cr, Number(id)) : fallbackProduct(id);
+  } catch {
+    product = fallbackProduct(id);
+  }
+  if (!product.imageUrl) return c.text("El producto no tiene foto.", 404);
+  const upstream = await fetch(product.imageUrl, { cf: { cacheTtl: 3600 } } as RequestInit);
+  if (!upstream.ok) return c.text("No se pudo cargar la foto.", 502);
+  return new Response(upstream.body, {
+    headers: {
+      "content-type": upstream.headers.get("content-type") || "image/jpeg",
+      "cache-control": "public, max-age=3600",
+      "access-control-allow-origin": "*",
+    },
+  });
+});
+
+// Video (Reel/TikTok/Historia) del producto: /reel?id=<id>
+app.get("/reel", async (c) => {
+  const id = c.req.query("id");
+  const cr = creds(c.env);
+  let product: Product;
+  try {
+    product = id && cr ? await getProduct(cr, Number(id)) : fallbackProduct(id);
+  } catch {
+    product = fallbackProduct(id);
+  }
+  return c.html(reelHTML(product));
 });
 
 // Catálogo (varios productos): /catalog?category=<id>
@@ -108,18 +172,14 @@ app.get("/catalog", async (c) => {
   const cr = creds(c.env);
   const cat = c.req.query("category");
   let products: Product[];
-  let title = "Ofertas";
-  try {
-    if (cr) {
-      products = cat ? await listProductsByCategory(cr, Number(cat)) : await listProducts(cr);
-      const sug = suggested(products);
-      products = (sug.length ? sug : products).filter((p) => p.inStock || p.quotable);
-    } else {
-      products = DEMO_LIST;
-    }
-  } catch (e) {
-    return c.text(`Error armando el catálogo: ${(e as Error).message}`, 502);
+  const title = "Ofertas";
+  if (cr) {
+    ({ products } = await listOrFallback(cr, cat));
+  } else {
+    products = FALLBACK_PRODUCTS;
   }
+  const sug = suggested(products);
+  products = (sug.length ? sug : products).filter((p) => p.inStock || p.quotable);
   return new ImageResponse(catalogHTML(products, title), { width: 1080, height: 1350 });
 });
 
@@ -129,14 +189,10 @@ app.get("/batch", async (c) => {
   const cat = c.req.query("category");
   const cr = creds(c.env);
   let products: Product[];
-  try {
-    if (cr) {
-      products = cat ? await listProductsByCategory(cr, Number(cat)) : await listProducts(cr);
-    } else {
-      products = DEMO_LIST;
-    }
-  } catch (e) {
-    return c.text(`Error: ${(e as Error).message}`, 502);
+  if (cr) {
+    ({ products } = await listOrFallback(cr, cat));
+  } else {
+    products = FALLBACK_PRODUCTS;
   }
 
   const eligible = products.filter((p) => p.inStock || p.quotable).slice(0, 12);
@@ -180,14 +236,18 @@ app.get("/generador", async (c) => {
         cat ? listProductsByCategory(cr, Number(cat)) : listProducts(cr, 50),
         listCategories(cr),
       ]);
-    } catch (e) {
-      notice = `No se pudieron traer los datos: ${(e as Error).message}`;
+    } catch {
+      // API caída o credenciales inválidas → catálogo de respaldo real (sin categorías en vivo).
+      products = FALLBACK_PRODUCTS;
+      categories = [];
+      notice = FALLBACK_NOTICE;
     }
   } else {
     notice =
-      "Todavía no está configurado el token de Jumpseller. Se muestran datos de demostración. " +
-      "Cargá los secretos JUMPSELLER_LOGIN y JUMPSELLER_AUTHTOKEN para ver tu catálogo real.";
-    products = DEMO_LIST;
+      "Todavía no está configurado el token de Jumpseller. Se muestra tu catálogo guardado " +
+      "(productos y fotos reales). Cargá los secretos JUMPSELLER_LOGIN y JUMPSELLER_AUTHTOKEN " +
+      "para ver el catálogo en vivo.";
+    products = FALLBACK_PRODUCTS;
   }
 
   return c.html(page(products, categories, notice, cat));
@@ -269,7 +329,8 @@ function card(p: Product): string {
     ? `<div style="display:flex;gap:8px;margin-top:10px;">
          <a href="/og?id=${p.id}&format=post" target="_blank" style="flex:1;text-align:center;padding:8px;background:${BRAND.colors.primary};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;">Post</a>
          <a href="/og?id=${p.id}&format=story" target="_blank" style="flex:1;text-align:center;padding:8px;background:#fff;border:1px solid ${BRAND.colors.primary};color:${BRAND.colors.primary};border-radius:8px;text-decoration:none;font-size:13px;">Historia</a>
-       </div>`
+       </div>
+       <a href="/reel?id=${p.id}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:8px;background:${BRAND.colors.sale};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">🎬 Reel con música</a>`
     : `<div style="margin-top:10px;font-size:13px;color:#94a3b8;">No elegible (sin stock)</div>`;
   return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
     ${img}
@@ -284,12 +345,19 @@ function card(p: Product): string {
 // hay tokens; si no, la deja en cola. Registra el resultado en KV (si existe).
 async function runScheduled(env: Bindings): Promise<QueueEntry | null> {
   const cr = creds(env);
-  if (!cr) {
-    console.log("[cron] sin credenciales de Jumpseller; nada que publicar");
-    return null;
+  let products: Product[];
+  if (cr) {
+    try {
+      products = await listProducts(cr, 100);
+    } catch {
+      console.log("[cron] API de Jumpseller falló; uso catálogo de respaldo");
+      products = FALLBACK_PRODUCTS;
+    }
+  } else {
+    console.log("[cron] sin credenciales de Jumpseller; uso catálogo de respaldo");
+    products = FALLBACK_PRODUCTS;
   }
 
-  const products = await listProducts(cr, 100);
   let cursor = 0;
   if (env.ADS_KV) cursor = Number(await env.ADS_KV.get("cursor")) || 0;
   const product = pickForIndex(products, cursor);
