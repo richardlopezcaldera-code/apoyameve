@@ -19,10 +19,16 @@ crons = ["0 13 * * *", "0 17 * * *", "0 23 * * *"]
 #   npx wrangler secret put TIKTOK_ACCESS_TOKEN
 # En local usar .dev.vars (ver .dev.vars.example).
 
+# Metricool (integrador único). El token va como secret:
+#   npx wrangler secret put METRICOOL_USER_TOKEN
+
 # ── Variables públicas ──
-# PUBLIC_BASE_URL: URL pública del Worker (Meta descarga la imagen desde ahí).
+# PUBLIC_BASE_URL: URL pública del Worker (las redes descargan la imagen de ahí).
 [vars]
 PUBLIC_BASE_URL = ""
+METRICOOL_USER_ID = "5097551"
+METRICOOL_BLOG_ID = "6621202"
+METRICOOL_NETWORKS = "instagram,facebook,tiktok"
 
 # ── Cola/rotación (opcional pero recomendado) ──
 # Crear con:  npx wrangler kv namespace create ADS_KV

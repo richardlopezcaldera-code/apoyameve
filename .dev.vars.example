@@ -15,7 +15,14 @@ FB_PAGE_TOKEN=
 # ── TikTok (Content Posting API) ──
 TIKTOK_ACCESS_TOKEN=
 
-# URL pública del Worker (Meta/TikTok descargan la imagen desde acá).
+# ── Metricool (integrador único IG+FB+TikTok, camino principal) ──
+# El token sale de tu perfil de Metricool (plan con acceso API).
+METRICOOL_USER_TOKEN=
+METRICOOL_USER_ID=5097551
+METRICOOL_BLOG_ID=6621202
+METRICOOL_NETWORKS=instagram,facebook,tiktok
+
+# URL pública del Worker (Metricool/Meta/TikTok descargan la imagen desde acá).
 PUBLIC_BASE_URL=
 
 # Protege el disparo manual /run-now (elegí una clave cualquiera).

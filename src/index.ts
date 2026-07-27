@@ -18,6 +18,7 @@ import { homeHTML } from "./home";
 import { pickForIndex } from "../lib/schedule";
 import { caption } from "../lib/caption";
 import { publishInstagram, publishFacebook, publishTikTok, type PublishResult } from "../lib/publish";
+import { publishViaMetricool } from "../lib/metricool";
 
 type Bindings = {
   JUMPSELLER_LOGIN?: string;
@@ -28,6 +29,11 @@ type Bindings = {
   FB_PAGE_ID?: string;
   FB_PAGE_TOKEN?: string;
   TIKTOK_ACCESS_TOKEN?: string;
+  // Metricool (integrador único IG+FB+TikTok) — si está, es el camino principal.
+  METRICOOL_USER_TOKEN?: string;
+  METRICOOL_USER_ID?: string;
+  METRICOOL_BLOG_ID?: string;
+  METRICOOL_NETWORKS?: string;
   PUBLIC_BASE_URL?: string;
   RUN_TOKEN?: string;
   ADS_KV?: KVNamespace;
@@ -298,14 +304,38 @@ async function runScheduled(env: Bindings): Promise<QueueEntry | null> {
   const cap = caption(product);
 
   const results: PublishResult[] = [];
-  if (imageUrl && env.IG_USER_ID && env.IG_ACCESS_TOKEN) {
-    results.push(await publishInstagram(env.IG_USER_ID, env.IG_ACCESS_TOKEN, imageUrl, cap));
-  }
-  if (imageUrl && env.FB_PAGE_ID && env.FB_PAGE_TOKEN) {
-    results.push(await publishFacebook(env.FB_PAGE_ID, env.FB_PAGE_TOKEN, imageUrl, cap));
-  }
-  if (imageUrl && env.TIKTOK_ACCESS_TOKEN) {
-    results.push(await publishTikTok(env.TIKTOK_ACCESS_TOKEN, imageUrl, product.name));
+  const metricoolReady =
+    imageUrl && env.METRICOOL_USER_TOKEN && env.METRICOOL_USER_ID && env.METRICOOL_BLOG_ID;
+
+  if (metricoolReady) {
+    // Camino principal: un solo posteo cubre todas las redes conectadas en Metricool.
+    const networks = (env.METRICOOL_NETWORKS ?? "instagram,facebook,tiktok")
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    results.push(
+      await publishViaMetricool(
+        {
+          userToken: env.METRICOOL_USER_TOKEN!,
+          userId: env.METRICOOL_USER_ID!,
+          blogId: env.METRICOOL_BLOG_ID!,
+          networks,
+        },
+        imageUrl!,
+        cap,
+      ),
+    );
+  } else {
+    // Fallback: APIs directas si no hay Metricool configurado.
+    if (imageUrl && env.IG_USER_ID && env.IG_ACCESS_TOKEN) {
+      results.push(await publishInstagram(env.IG_USER_ID, env.IG_ACCESS_TOKEN, imageUrl, cap));
+    }
+    if (imageUrl && env.FB_PAGE_ID && env.FB_PAGE_TOKEN) {
+      results.push(await publishFacebook(env.FB_PAGE_ID, env.FB_PAGE_TOKEN, imageUrl, cap));
+    }
+    if (imageUrl && env.TIKTOK_ACCESS_TOKEN) {
+      results.push(await publishTikTok(env.TIKTOK_ACCESS_TOKEN, imageUrl, product.name));
+    }
   }
 
   const entry: QueueEntry = {
