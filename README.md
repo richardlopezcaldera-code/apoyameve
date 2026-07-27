@@ -50,7 +50,23 @@ Create → Workers) y configurar los secrets ahí.
   stock no son elegibles.
 - `/og?id=<id>` — genera la imagen del aviso del producto.
 
+## Automatización (3 publicaciones/día)
+
+Cron Triggers de Cloudflare disparan el handler `scheduled` 3 veces al día: elige
+un producto elegible, arma la pieza (foto real) + caption y publica. Con
+`METRICOOL_USER_TOKEN` publica vía **Metricool** (IG + FB + TikTok en uno); si no,
+usa las APIs directas de Meta/TikTok. Ver `docs/SETUP-METRICOOL.md`,
+`docs/SETUP-REDES.md` y `docs/SETUP-TIKTOK.md`.
+
+Rutas útiles: `/queue` (historial) y `/run-now?token=<RUN_TOKEN>` (prueba manual).
+
+## Hosting
+
+La app corre en **Cloudflare Workers**. Vercel está desactivado para este repo
+(`vercel.json` → `github.enabled=false`), porque no puede construir un Worker.
+
 ## Estado
 
-Prototipo: plantilla de **post cuadrado** funcionando. Próximo: historia vertical
-(1080×1920), catálogo (varios productos), selección por categoría y descarga en lote.
+Post cuadrado, historia (1080×1920), catálogo, descarga en lote y motor automático
+3/día: **implementados**. Para que postee de verdad solo falta cargar los secrets
+(Jumpseller + Metricool) y `PUBLIC_BASE_URL`, y `npm run deploy`.

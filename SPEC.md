@@ -57,37 +57,40 @@ Herramienta personal: **un solo usuario** (el dueño del negocio), sin login.
 
 ---
 
-## 2. Diseño técnico (el "cómo")
+## 2. Diseño técnico (el "cómo") — implementado
 
-### Stack
-- **Next.js (App Router)** desplegado en **Vercel**.
-- **Generación de imágenes:** `@vercel/og` (Satori) — plantillas HTML/CSS → PNG
-  en el servidor.
-- **Datos:** ruta de API interna (server-side) que llama a Jumpseller. El **token
-  de Jumpseller vive como variable de entorno**, nunca en el navegador.
+### Stack (hosting: Cloudflare)
+- **Cloudflare Workers** + **Hono** (router y UI). Vercel quedó **desactivado**
+  (`vercel.json` con `github.enabled=false`); Cloudflare es el hosting definitivo.
+- **Generación de imágenes:** `workers-og` (Satori) — plantillas HTML/CSS → PNG
+  en el edge.
+- **Datos:** el Worker llama a la API de **Jumpseller** server-side. El token vive
+  como **secret** de Cloudflare, nunca en el navegador.
 
-### Flujo
-1. El usuario elige categoría o mira las sugerencias.
-2. El sistema trae esos productos de Jumpseller.
-3. El usuario elige formato (post / historia / catálogo).
-4. Vista previa de la pieza con la marca.
-5. Descarga el PNG (individual o en lote).
+### Rutas
+- `/` — home pública (estilo de marca aprobado).
+- `/generador` — herramienta interna: elegir producto, formato y descargar.
+- `/og?id=<id>&format=post|story` — imagen del aviso.
+- `/catalog?category=<id>` — pieza de catálogo (varios productos).
+- `/batch?...&format=` — descarga en lote (.zip, con `fflate`).
+- `/queue` — historial de publicaciones automáticas.
+- `/run-now?token=` — disparo manual del motor (protegido con `RUN_TOKEN`).
 
-### Detalles de ingeniería a resolver en el build (no bloquean el diseño)
-- **Colores y tipografía de marca:** `@vercel/og` necesita fuente embebida; definir
-  la paleta exacta (el logo la sugiere).
-- **Fotos remotas:** las imágenes de Jumpseller (`images.jumpseller.com`) son
-  públicas; `@vercel/og` puede traerlas directo.
-- **Descarga en lote:** definir si es un `.zip`.
-- **Caché de productos:** live fetch para empezar; cachear después si hace falta.
-- **Límites de Vercel** para generación de imágenes (verificar según el plan).
+### Publicación automática (3/día)
+- **Cron Triggers de Cloudflare** (10:00, 14:00, 20:00 Chile) → handler `scheduled`.
+- Elige un producto elegible (rota ofertas/destacados, saltea sin stock), arma la
+  pieza (foto real, sin IA) y el caption, y publica.
+- **Publicación vía Metricool** (integrador único IG + FB + TikTok) cuando está
+  `METRICOOL_USER_TOKEN`; si no, cae a las APIs directas de Meta/TikTok.
+
+### Secrets / variables
+`JUMPSELLER_LOGIN`, `JUMPSELLER_AUTHTOKEN`, `METRICOOL_USER_TOKEN`
+(+ `METRICOOL_USER_ID`/`BLOG_ID`/`NETWORKS`), y opcionales `IG_*`, `FB_*`,
+`TIKTOK_ACCESS_TOKEN`, `PUBLIC_BASE_URL`, `RUN_TOKEN`. Guías en `docs/`.
 
 ---
 
-## 3. Próximos pasos
-1. Scaffolding Next.js + configuración de Vercel y variable de entorno del token
-   Jumpseller.
-2. Ruta de API que lista productos por categoría y sugeridos.
-3. Primera plantilla (post cuadrado 1080×1080) renderizando un producto real.
-4. Plantillas de historia y catálogo.
-5. Selección por categoría + sugerencias, vista previa y descarga.
+## 3. Estado
+Implementado en Cloudflare Workers y documentado. Para activar el posteo real
+solo falta cargar `METRICOOL_USER_TOKEN` y `PUBLIC_BASE_URL`, y desplegar con
+`npm run deploy`. Ver `README.md` y `docs/SETUP-*.md`.
