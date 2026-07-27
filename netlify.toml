@@ -1,0 +1,14 @@
+# Esta app NO corre en Netlify: se hospeda en Cloudflare Workers.
+# Netlify se conectó por accidente. Esta configuración CANCELA cualquier build:
+# el comando `ignore` devuelve 0 siempre, y Netlify interpreta eso como
+# "saltar el build" (no despliega nada).
+#
+# Lo definitivo es desconectar Netlify del repo (borrar el sitio o quitarle el
+# acceso en GitHub → Settings → Installations → Netlify). Esto es solo un
+# seguro por si se vuelve a conectar.
+
+[build]
+  # `ignore` con salida 0 => Netlify omite el build (no hay deploy).
+  ignore = "exit 0"
+  command = "echo 'Build cancelado: esta app corre en Cloudflare Workers, no en Netlify.'"
+  publish = "."
