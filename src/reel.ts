@@ -30,7 +30,7 @@ export function reelHTML(p: Product): string {
 <title>Reel · ${BRAND.name}</title>
 <style>
   *{box-sizing:border-box}
-  body{margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body{margin:0;background:#1c1815;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   header a{color:#93c5fd;font-size:14px;text-decoration:none}
   main{max-width:520px;margin:0 auto;padding:0 16px 40px;text-align:center}
@@ -38,11 +38,11 @@ export function reelHTML(p: Product): string {
   video{display:none}
   .controls{margin-top:18px;display:flex;flex-direction:column;gap:12px;align-items:center}
   button{font-size:16px;font-weight:700;padding:14px 22px;border:0;border-radius:12px;cursor:pointer}
-  .primary{background:#e11d48;color:#fff}
+  .primary{background:#b24a2c;color:#fff}
   .primary:disabled{opacity:.5;cursor:default}
   .toggle{background:transparent;color:#cbd5e1;border:1px solid #334155;font-size:14px;padding:8px 14px}
   .toggle[aria-pressed="false"]{opacity:.6}
-  .hint{color:#94a3b8;font-size:13px;line-height:1.5;max-width:360px;margin:6px auto 0}
+  .hint{color:#8a7c6a;font-size:13px;line-height:1.5;max-width:360px;margin:6px auto 0}
   .status{font-size:14px;color:#fbbf24;min-height:20px}
   .dl{display:none;background:#0ea5e9;color:#fff}
 </style>
@@ -107,23 +107,23 @@ function drawFrame(t, alpha){
 
   // Logo (texto) arriba a la izquierda
   ctx.textBaseline='alphabetic';
-  ctx.font='800 40px system-ui,sans-serif'; ctx.fillStyle='#0f172a'; ctx.textAlign='left';
+  ctx.font='800 40px system-ui,sans-serif'; ctx.fillStyle='#1c1815'; ctx.textAlign='left';
   ctx.fillText('Mobiliario', 40, 66);
   const mw = ctx.measureText('Mobiliario').width;
-  ctx.fillStyle='#c2410c'; ctx.fillText('Tech', 40+mw, 66);
+  ctx.fillStyle='#b24a2c'; ctx.fillText('Tech', 40+mw, 66);
 
   // Chip de categoría
   if(D.category){
     ctx.font='700 24px system-ui,sans-serif';
     const cw = ctx.measureText(D.category).width + 32;
-    ctx.fillStyle='rgba(15,23,42,.9)'; roundRect(W-40-cw, 34, cw, 44, 22); ctx.fill();
+    ctx.fillStyle='rgba(28,24,21,.92)'; roundRect(W-40-cw, 34, cw, 44, 22); ctx.fill();
     ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText(D.category, W-40-cw/2, 64);
   }
 
   // Sello de descuento
   if(D.onSale && D.disc>0){
     const r=76, cx=W-40-r, cy=170+r;
-    ctx.fillStyle='#e11d48'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#1c1815'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#fff'; ctx.textAlign='center';
     ctx.font='900 46px system-ui,sans-serif'; ctx.fillText('-'+D.disc+'%', cx, cy+2);
     ctx.font='700 20px system-ui,sans-serif'; ctx.fillText('OFERTA', cx, cy+34);
@@ -133,29 +133,29 @@ function drawFrame(t, alpha){
   const by = H*0.80;
   ctx.textAlign='left';
   const nameLines = wrap(D.name, W-80, '800 46px system-ui,sans-serif');
-  ctx.font='800 46px system-ui,sans-serif'; ctx.fillStyle='#0f172a';
+  ctx.font='800 46px system-ui,sans-serif'; ctx.fillStyle='#1c1815';
   let y = by; for(const l of nameLines){ ctx.fillText(l, 40, y); y+=54; }
 
   // Precio
   y += 6;
-  ctx.font='900 62px system-ui,sans-serif'; ctx.fillStyle='#0f172a';
+  ctx.font='900 62px system-ui,sans-serif'; ctx.fillStyle='#1c1815';
   ctx.fillText(D.priceNow, 40, y);
   if(D.priceOld){
     const pw = ctx.measureText(D.priceNow).width;
-    ctx.font='600 34px system-ui,sans-serif'; ctx.fillStyle='#94a3b8';
+    ctx.font='600 34px system-ui,sans-serif'; ctx.fillStyle='#8a7c6a';
     ctx.fillText(D.priceOld, 40+pw+18, y-6);
     const ow = ctx.measureText(D.priceOld).width;
-    ctx.strokeStyle='#94a3b8'; ctx.lineWidth=3; ctx.beginPath();
+    ctx.strokeStyle='#8a7c6a'; ctx.lineWidth=3; ctx.beginPath();
     ctx.moveTo(40+pw+18, y-18); ctx.lineTo(40+pw+18+ow, y-18); ctx.stroke();
   }
 
   // CTA + WhatsApp
   y += 46;
-  ctx.font='700 30px system-ui,sans-serif'; ctx.fillStyle='#c2410c';
+  ctx.font='700 30px system-ui,sans-serif'; ctx.fillStyle='#b24a2c';
   ctx.fillText(D.cta + '  ·  ' + D.whatsapp, 40, y);
 
   // Fade in/out
-  if(alpha<1){ ctx.fillStyle='rgba(15,23,42,'+(1-alpha)+')'; ctx.fillRect(0,0,W,H); }
+  if(alpha<1){ ctx.fillStyle='rgba(28,24,21,'+(1-alpha)+')'; ctx.fillRect(0,0,W,H); }
 }
 
 // ---- Música suave sintetizada (Web Audio) ----

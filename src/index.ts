@@ -68,6 +68,14 @@ const DEMO: Product = {
   featured: true,
   permalink: "sillon-de-oficina-km-5050",
 };
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function creds(env: Bindings): Credentials | null {
   if (env.JUMPSELLER_LOGIN && env.JUMPSELLER_AUTHTOKEN) {
     return { login: env.JUMPSELLER_LOGIN, authtoken: env.JUMPSELLER_AUTHTOKEN };
@@ -219,6 +227,56 @@ app.get("/batch", async (c) => {
   });
 });
 
+// Diagnóstico de la conexión con Jumpseller (no muestra el authtoken completo).
+app.get("/estado", async (c) => {
+  const env = c.env;
+  const login = env.JUMPSELLER_LOGIN;
+  const token = env.JUMPSELLER_AUTHTOKEN;
+  const mask = (s?: string) =>
+    s ? `${s.slice(0, 4)}…${s.slice(-2)} (${s.length} caracteres)` : "— no configurado —";
+
+  let live = "No se probó: faltan credenciales.";
+  let ok = false;
+  let hint = "";
+  if (login && token) {
+    const url = `https://api.jumpseller.com/v1/products.json?login=${encodeURIComponent(login)}&authtoken=${encodeURIComponent(token)}&limit=1`;
+    try {
+      const res = await fetch(url, { cf: { cacheTtl: 0 } } as RequestInit);
+      if (res.ok) {
+        const data = (await res.json()) as unknown[];
+        ok = true;
+        live = `✅ OK (HTTP 200). La API respondió correctamente (${data.length} producto de prueba).`;
+        hint = "Todo en orden: el generador ya usa tu catálogo en vivo.";
+      } else {
+        const body = (await res.text()).slice(0, 160);
+        live = `❌ Jumpseller respondió HTTP ${res.status}. Detalle: ${esc(body)}`;
+        hint =
+          res.status === 401 || res.status === 403
+            ? "Las credenciales fueron rechazadas. Verificá que JUMPSELLER_LOGIN sea el <b>Login</b> de la API (no el nombre de la app) y JUMPSELLER_AUTHTOKEN el <b>Auth Token</b> correcto, desde tu panel de Jumpseller → Cuenta → API."
+            : "Error temporal o de red hacia Jumpseller. Probá de nuevo en un momento.";
+      }
+    } catch (e) {
+      live = `❌ No se pudo conectar: ${esc((e as Error).message)}`;
+      hint = "Problema de red al llamar a la API de Jumpseller.";
+    }
+  } else {
+    hint =
+      "Cargá los secretos en Cloudflare → Worker → Settings → Variables and Secrets. Mientras tanto, la app usa el catálogo de respaldo.";
+  }
+
+  return c.html(`<!doctype html><meta charset="utf-8"><title>Estado · ${BRAND.name}</title>
+<body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1c1815;background:#fbf7f0;">
+  <h2>Estado de la conexión · ${BRAND.name}</h2>
+  <p><a href="/generador" style="color:#b24a2c;">← Volver al generador</a></p>
+  <table style="border-collapse:collapse;width:100%;font-size:15px;">
+    <tr><td style="padding:8px 4px;color:#8a7c6a;">JUMPSELLER_LOGIN</td><td style="padding:8px 4px;"><code>${esc(mask(login))}</code></td></tr>
+    <tr><td style="padding:8px 4px;color:#8a7c6a;">JUMPSELLER_AUTHTOKEN</td><td style="padding:8px 4px;"><code>${esc(mask(token))}</code></td></tr>
+    <tr><td style="padding:8px 4px;color:#8a7c6a;">Prueba en vivo</td><td style="padding:8px 4px;">${live}</td></tr>
+  </table>
+  <div style="margin-top:20px;padding:14px 18px;border-radius:10px;background:${ok ? "#dce8d6" : "#fde6d6"};border:1px solid ${ok ? "#5e8c4e" : "#b24a2c"};">${hint}</div>
+</body>`);
+});
+
 // Home pública (estilo aprobado)
 app.get("/", (c) => c.html(homeHTML()));
 
@@ -330,7 +388,7 @@ function card(p: Product): string {
          <a href="/og?id=${p.id}&format=post" target="_blank" style="flex:1;text-align:center;padding:8px;background:${BRAND.colors.primary};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;">Post</a>
          <a href="/og?id=${p.id}&format=story" target="_blank" style="flex:1;text-align:center;padding:8px;background:#fff;border:1px solid ${BRAND.colors.primary};color:${BRAND.colors.primary};border-radius:8px;text-decoration:none;font-size:13px;">Historia</a>
        </div>
-       <a href="/reel?id=${p.id}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:8px;background:${BRAND.colors.sale};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">🎬 Reel con música</a>`
+       <a href="/reel?id=${p.id}" target="_blank" style="display:block;text-align:center;margin-top:8px;padding:8px;background:${BRAND.colors.primary};color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">🎬 Reel con música</a>`
     : `<div style="margin-top:10px;font-size:13px;color:#94a3b8;">No elegible (sin stock)</div>`;
   return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;">
     ${img}
