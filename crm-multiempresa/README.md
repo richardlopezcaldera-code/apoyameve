@@ -15,21 +15,25 @@ crm-multiempresa/
 ├─ docs/
 │  ├─ BLUEPRINT_ENTERPRISE.md    Documento maestro: arquitectura, seguridad,
 │  │                             roles, panel holding, migración y roadmap.
+│  ├─ PUESTA_EN_MARCHA.md        Runbook: cargar TODA la base en un Supabase nuevo.
 │  └─ INTEGRACION_APP.md         Cómo portar los módulos de la v30 al shell.
 ├─ app/
 │  └─ index.html                 App shell multiempresa (referencia, funcional):
 │                                login Supabase Auth + empresa activa + panel
 │                                holding + capa de datos por empresa_id.
-│                                Módulos portados: Clientes y Cotizaciones
-│                                (builder, catálogo, despacho, PDF, aprobación).
+│                                Módulos: Clientes, Cotizaciones (builder,
+│                                despacho, PDF, aprobación), Productos y Proveedores.
 └─ db/
    ├─ 01_schema_multiempresa.sql Esquema multi-tenant + RLS + funciones + vistas.
    ├─ 02_seed_demo.sql           Dos empresas de ejemplo para probar el aislamiento.
    ├─ 03_migracion_kam.sql       Importa los datos de una v30 (tablas kam_*) como
    │                             un tenant más (no destructivo).
    ├─ 04_catalogo_kamiana.sql    Carga los 1439 productos del catálogo de la v30
-   │                             en la empresa 'kamiana'. Idempotente y no
-   │                             destructivo (no duplica ni modifica lo existente).
+   │                             (costos con parches). Idempotente y no destructivo.
+   ├─ 05_setup_kamiana.sql       Crea la empresa 'kamiana' con su marca (RUT,
+   │                             contacto, bancos, firmas) para el PDF y la config.
+   ├─ 06_usuarios_kamiana.sql    Asigna roles/membresías a los usuarios (tras
+   │                             crearlos en Supabase Auth).
    └─ tests/                     Arnés de validación local (RLS/aislamiento) —
                                  esquema probado en PostgreSQL 16, todo en verde.
 ```

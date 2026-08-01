@@ -269,7 +269,45 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
+    <!-- PROVEEDORES -->
+    <section id="s-proveedores" class="section">
+      <div class="card">
+        <h2>🏭 Proveedores</h2>
+        <div class="searchbar">
+          <input id="pv-q" placeholder="🔍 Buscar proveedor" oninput="renderProveedores()">
+          <button class="btn-dark" onclick="openProveedor()">+ Agregar</button>
+        </div>
+        <div style="overflow:auto;max-height:60vh">
+          <table><thead><tr><th>Nombre</th><th>RUT</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th></th></tr></thead>
+          <tbody id="pv-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- Diálogo alta/edición de proveedor -->
+  <dialog id="dlg-pv" style="border:none;border-radius:14px;padding:0;width:min(520px,94vw)">
+    <form method="dialog" style="margin:0">
+      <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700" id="dlg-pv-h">Nuevo proveedor</div>
+      <div style="padding:18px">
+        <input type="hidden" id="v-id">
+        <label>Nombre *</label><input id="v-nombre">
+        <div class="row" style="margin-top:6px">
+          <div><label>RUT</label><input id="v-rut"></div>
+          <div><label>Contacto</label><input id="v-contacto"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Teléfono</label><input id="v-tel"></div>
+          <div><label>Email</label><input id="v-email"></div>
+        </div>
+        <div class="actions" style="justify-content:flex-end">
+          <button class="btn-gray" value="cancel">Cancelar</button>
+          <button class="btn-green" value="ok" onclick="event.preventDefault();saveProveedor()">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Diálogo alta/edición de producto -->
   <dialog id="dlg-pr" style="border:none;border-radius:14px;padding:0;width:min(560px,94vw)">
@@ -417,6 +455,7 @@ async function cargarDatosEmpresa(){
   catch(_){ MT.empresaFull={}; MT.config={pct_venta:35, iva:19, moneda:"CLP"}; }
   try{ CAT = await tSel("productos","select=*&deleted=eq.false&order=nombre"); }catch(_){ CAT=[]; }
   try{ CLIENTES = await tSel("clientes","select=*&order=nombre"); }catch(_){ CLIENTES=[]; }
+  try{ PROV = await tSel("proveedores","select=*&order=nombre"); }catch(_){ PROV=[]; }
   // categorías del catálogo para el filtro
   const cats = [...new Set(CAT.map(p=>p.categoria).filter(Boolean))].sort();
   const sel = $("b-prcat"); if(sel){ sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); }
@@ -438,6 +477,7 @@ const MODULES = [
   {id:"clientes", label:"👤 Clientes",     roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"productos", label:"📦 Productos", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"proveedores", label:"🏭 Proveedores", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   // SLOT: añade aquí más módulos de la v30 con sus roles.
 ];
 function buildNav(){
@@ -454,6 +494,7 @@ function go(id){
   if(id==="clientes")     renderClientes();
   if(id==="cotizaciones") { if(!CURR) nuevaCotiz(); else showBuilder(); }
   if(id==="productos")    renderProductos();
+  if(id==="proveedores")  renderProveedores();
   if(id==="holding")      { /* ya renderizado al entrar */ }
 }
 
@@ -517,6 +558,7 @@ async function delCliente(id){ if(!confirm("¿Eliminar cliente?")) return;
 let CURR = null;      // cotización en edición
 let CAT = [];         // catálogo (productos de la empresa activa)
 let CLIENTES = [];    // clientes de la empresa activa (caché de búsqueda)
+let PROV = [];        // proveedores de la empresa activa
 
 const ivaPct = () => Number(MT.config && MT.config.iva) || 19;
 function ventaUnit(costo, pct){ return Math.round((Number(costo)||0) * (1 + (Number(pct)||0)/100)); }
@@ -880,6 +922,41 @@ function parseCSV(text){
   }
   if(cur.length||row.length){ row.push(cur); rows.push(row); }
   return rows.filter(r=>r.length && r.some(x=>x!==""));
+}
+
+/* ============================================================================
+   PROVEEDORES (por empresa)
+============================================================================ */
+const dlgPv = () => document.getElementById("dlg-pv");
+function renderProveedores(){
+  const q=($("pv-q").value||"").toLowerCase();
+  const list=PROV.filter(p=>(p.nombre||"").toLowerCase().includes(q));
+  $("pv-body").innerHTML = list.map(p=>`<tr>
+    <td>${esc(p.nombre||"")}</td><td>${esc(p.rut||"")}</td><td>${esc(p.contacto||"")}</td><td>${esc(p.telefono||"")}</td><td>${esc(p.email||"")}</td>
+    <td><button class="btn-sec" onclick="openProveedor('${p.id}')">✎</button> <button class="btn-red" onclick="delProveedor('${p.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">Sin proveedores.</td></tr>`;
+}
+function openProveedor(id){
+  const p=id?PROV.find(x=>x.id===id):null;
+  $("v-id").value=p?p.id:""; $("v-nombre").value=p?p.nombre:""; $("v-rut").value=p?(p.rut||""):"";
+  $("v-contacto").value=p?(p.contacto||""):""; $("v-tel").value=p?(p.telefono||""):""; $("v-email").value=p?(p.email||""):"";
+  $("dlg-pv-h").textContent=p?"Editar proveedor":"Nuevo proveedor";
+  dlgPv().showModal();
+}
+async function saveProveedor(){
+  const nombre=$("v-nombre").value.trim(); if(!nombre){ alert("El nombre es obligatorio."); return; }
+  const datos={ nombre, rut:$("v-rut").value.trim(), contacto:$("v-contacto").value.trim(), telefono:$("v-tel").value.trim(), email:$("v-email").value.trim() };
+  const id=$("v-id").value;
+  try{
+    if(id){ await tUpdate("proveedores", id, datos); const p=PROV.find(x=>x.id===id); if(p) Object.assign(p, datos); }
+    else { const r=await tInsert("proveedores", datos); const saved=Array.isArray(r)?r[0]:r; PROV.push(saved); }
+    dlgPv().close(); PROV.sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||"")); renderProveedores();
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+async function delProveedor(id){
+  if(!confirm("¿Eliminar proveedor?")) return;
+  try{ await tDelete("proveedores", id); PROV=PROV.filter(x=>x.id!==id); renderProveedores(); }
+  catch(e){ alert("No se pudo eliminar: "+e.message); }
 }
 
 /* ===== utilidades ===== */
