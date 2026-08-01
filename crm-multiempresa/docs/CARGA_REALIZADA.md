@@ -1,59 +1,42 @@
-# Carga realizada en Supabase (registro)
+# Estado de la carga en Supabase (registro)
 
-Proyecto: **htjjxqvzxkrabozopxhe** (tu Supabase actual). Carga **aditiva y no
-destructiva**: se crearon tablas nuevas del modelo multiempresa y se copiaron los
-datos **dentro de la misma base**. Las tablas `kam_*` y `mtc_*` **no se tocaron**
-(verificado: kam 400/168/718 · mtc 160/1001/24).
+## Proyecto de PRODUCCIÓN — intacto
 
-## Qué se hizo
+`htjjxqvzxkrabozopxhe` (supabase-lime-door): **sin cambios**. Se probó una carga
+aditiva y luego se **revirtió por completo** a pedido del usuario. Solo existen
+sus tablas originales `kam_*` y `mtc_*` (verificado: kam 400/168/718 ·
+mtc 160/1001/24). **No se vuelve a tocar**; si acaso, solo lectura.
 
-1. **Esquema multiempresa** aplicado (tablas `empresas`, `perfiles`, `membresias`,
-   `clientes`, `productos`, `proveedores`, `cotizaciones`, `contadores`,
-   `auditoria`, funciones, RLS y vista `v_resumen_empresas`).
-2. **Dos empresas (tenants)** creadas:
-   - `kamiana` — SERVICIO KAMIANA SPA (marca completa: RUT, contacto, bancos, firmas).
-   - `mobiliariotech` — MobiliarioTech.
-3. **Migración de datos reales** (in-DB, por `legacy_id`, idempotente):
+## Proyecto de PRUEBA (nuevo, sin publicar)
 
-| Empresa | Clientes | Productos | Proveedores | Cotizaciones | Aprobadas | Ventas aprobadas |
-|---|---|---|---|---|---|---|
-| SERVICIO KAMIANA SPA | 400 | 166 | 6 | 718 | 6 | $8.575.622 |
-| MobiliarioTech | 160 | 1001 | 7 | 24 | 6 | $3.271.715 |
+`awdgvtfchubneruyqman` (crm-multiempresa), plan gratuito. Aquí vive el sistema
+multiempresa nuevo:
 
-- KAMIANA: la cotización real vivía en `kam_cotizaciones.data`; se migraron los
-  ítems desde ahí y se **recalculó el total** (precio + despacho + IVA 19%) porque
-  la v30 no lo guardaba.
-- MobiliarioTech: cotizaciones extraídas de `mtc_cotizaciones.data` (formato
-  propio con `n/p/q/cost`); el total ya venía en los datos.
-4. **Contadores** de numeración fijados (KAMIANA 46, MTC 232 en formato COT-#####).
+- **Esquema** multiempresa completo (tablas, RLS, funciones, vista holding).
+- **2 empresas**: `kamiana` (marca completa) y `mobiliariotech`.
+- **Datos de prueba** (muestra real, copiada en solo-lectura desde producción):
+  - KAMIANA: 30 clientes, 40 productos.
+  - MobiliarioTech: 40 productos.
+- **Super admin**: `richardlopezcaldera@gmail.com` (clave temporal
+  `CrmHolding2026!`) con `es_super_admin=true`.
 
-## Nota sobre el bug corregido
+> Es una muestra para probar el flujo completo (login → holding → entrar a una
+> empresa → catálogo → crear cotización). La copia TOTAL de datos (incl. las 718
+> cotizaciones de KAMIANA, 7,3 MB) requiere el método FDW con la contraseña de la
+> base de producción, y se hará cuando se decida publicar.
 
-La vista `v_resumen_empresas` tenía JOINs que multiplicaban las ventas por el
-número de clientes (fan-out). Se reescribió con subconsultas por empresa. Los
-totales por cotización siempre estuvieron bien.
+## Cómo probar
 
-## Falta para poder USAR la app (paso de autenticación)
+1. Abre `app/index.html` con la anon key del proyecto de prueba puesta
+   (reemplaza el placeholder o `localStorage.setItem('SUPA_ANON','<anon key>')`).
+2. Entra con el super admin → verás el **Panel Holding** con ambas empresas.
+3. "Entrar →" a KAMIANA: verás sus clientes y catálogo; crea una cotización de prueba.
 
-Los datos están cargados, pero **RLS bloquea todo hasta que haya usuarios**:
+## Copia TOTAL más adelante (FDW, solo lectura)
 
-1. **Authentication → Providers**: activar **Email**.
-2. **Authentication → Users → Add user**: crear el/los usuarios (correo + clave).
-3. Super admin del holding:
-   ```sql
-   update perfiles set es_super_admin = true where lower(email) = 'TU-CORREO';
-   ```
-4. Asignar roles por empresa: editar correos en `db/06_usuarios_kamiana.sql` y
-   ejecutarlo (o usar `crear_empresa_con_admin` para nuevas empresas).
-5. En `app/index.html` poner `SUPA_URL = https://htjjxqvzxkrabozopxhe.supabase.co`
-   y la **anon key** del proyecto (Project Settings → API), y publicar.
-
-## Reversible
-
-Todo lo nuevo se puede quitar sin afectar la v30:
-```sql
-drop view if exists v_resumen_empresas;
-drop table if exists auditoria, contadores, cotizaciones, proveedores, productos,
-  clientes, membresias, perfiles, empresas cascade;
--- (kam_* y mtc_* permanecen intactas)
-```
+Cuando quieras migrar TODO el histórico:
+1. Resetear la *Database password* del proyecto de producción (no afecta el
+   cotizador, que usa la anon key).
+2. En el proyecto de prueba: `postgres_fdw` apuntando en solo-lectura a producción.
+3. `insert into ... select ...` de clientes/productos/proveedores/cotizaciones.
+4. Eliminar el server FDW (la contraseña no queda almacenada).
