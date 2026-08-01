@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Multiempresa</title>
+<!--
+  App shell MULTIEMPRESA (referencia) — implementa el §7 del BLUEPRINT_ENTERPRISE.
+  Demuestra, funcionando de punta a punta contra el esquema de ../db:
+    - Login real con Supabase Auth (JWT, no anon key para los datos)
+    - Carga de perfil + membresías del usuario
+    - Empresa activa (auto si es una, selector si son varias)
+    - Panel Holding para super admin (ve TODAS las empresas: v_resumen_empresas)
+    - Capa de datos aislada por empresa_id (RLS del lado del servidor)
+    - Numeración por empresa vía RPC siguiente_numero
+  Los módulos de la v30 (cotizaciones, productos, Mercado Público, etc.) se
+  pegan en las secciones marcadas con  <!-- SLOT: ... -->  y usan los helpers
+  tSel / tInsert / tUpdate / tDelete (ver más abajo). Guía: docs/INTEGRACION_APP.md
+-->
+<style>
+:root{--nav:#16324f;--nav2:#1f4468;--acc:#e8871e;--acc2:#cf7715;--azul:#2563eb;--verde:#16a34a;--gris:#eef1f5;--linea:#e2e8f0;--txt:#1f2937;--rojo:#c0392b;--oro:#c9962b;}
+*{box-sizing:border-box;font-family:'Segoe UI',Roboto,Arial,sans-serif;}
+body{margin:0;background:var(--gris);color:var(--txt);}
+button{cursor:pointer;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;}
+.btn{background:var(--acc);color:#fff;} .btn:hover{background:var(--acc2);}
+.btn-dark{background:var(--nav);color:#fff;} .btn-blue{background:var(--azul);color:#fff;}
+.btn-green{background:var(--verde);color:#fff;} .btn-sec{background:#fff;color:var(--nav);border:1px solid var(--nav);}
+.btn-red{background:var(--rojo);color:#fff;} .btn-gray{background:#64748b;color:#fff;}
+input,select,textarea{padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;width:100%;background:#fff;}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:13px;}
+th,td{border:1px solid var(--linea);padding:7px 8px;text-align:left;}
+th{background:var(--nav);color:#fff;} tr:nth-child(even){background:#f9fafb;}
+.hidden{display:none!important;}
+.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;}
+.row{display:flex;gap:12px;flex-wrap:wrap;} .row>div{flex:1;min-width:180px;}
+/* Login */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#12283f,#1f4468);}
+#login .box{background:#fff;padding:34px;border-radius:16px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,.35);}
+#login h1{font-size:20px;margin:0 0 4px;color:var(--nav);} #login p{text-align:center;color:#64748b;margin:0 0 20px;font-size:13px;}
+#login label{font-size:12px;color:#475569;font-weight:600;}
+/* App */
+#app{display:none;} header.top{background:var(--nav);color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+header .brand{font-weight:800;font-size:18px;} header .brand small{font-weight:400;opacity:.8;font-size:12px;}
+.empbar{background:var(--nav2);color:#fff;padding:8px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;}
+.empbar select{width:auto;min-width:220px;} .badge{background:var(--oro);color:#111;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;}
+nav#nav{background:#fff;border-bottom:1px solid var(--linea);padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;}
+nav#nav button{background:#fff;color:var(--nav);border:1px solid var(--linea);} nav#nav button.active{background:var(--acc);color:#fff;border-color:var(--acc);}
+main{padding:18px;max-width:1100px;margin:0 auto;} .section{display:none;} .section.active{display:block;}
+h2{color:var(--nav);margin-top:0;}
+.kpi{display:flex;gap:14px;flex-wrap:wrap;} .kpi .box{background:#fff;border-radius:12px;padding:16px;flex:1;min-width:150px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.kpi .box b{display:block;font-size:26px;color:var(--nav);} .kpi .box span{font-size:12px;color:#64748b;}
+.muted{color:#64748b;font-size:12px;}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login">
+  <div class="box">
+    <h1>CRM Multiempresa</h1>
+    <p>Accede con tu correo y clave</p>
+    <label>Correo</label><input id="lg-email" type="email" placeholder="tucorreo@empresa.com">
+    <div style="height:10px"></div>
+    <label>Clave</label><input id="lg-pass" type="password" placeholder="clave" onkeydown="if(event.key==='Enter')doLogin()">
+    <div style="height:16px"></div>
+    <button class="btn-dark" style="width:100%" onclick="doLogin()">Ingresar</button>
+    <p id="lg-err" style="color:var(--rojo);min-height:16px;margin-top:10px;text-align:left"></p>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app">
+  <header class="top">
+    <div class="brand">CRM <small>Multiempresa</small></div>
+    <div><span id="hdr-user" class="muted" style="color:#cbd5e1"></span>
+      <button class="btn-gray" onclick="logout()">Salir</button></div>
+  </header>
+
+  <!-- Barra de empresa activa / cambio de tenant -->
+  <div class="empbar">
+    <span>Empresa activa:</span>
+    <select id="emp-select" onchange="cambiarEmpresa(this.value)"></select>
+    <span id="emp-rol" class="badge"></span>
+    <button id="btn-holding" class="btn-sec hidden" onclick="go('holding')">🏢 Panel Holding</button>
+  </div>
+
+  <nav id="nav"></nav>
+
+  <main>
+    <!-- PANEL HOLDING (solo super admin) -->
+    <section id="s-holding" class="section">
+      <div class="card">
+        <h2>🏢 Panel Holding — todas las empresas</h2>
+        <p class="muted">Consolidado de la plataforma. Elige una empresa arriba para entrar a operar dentro de ella.</p>
+        <div class="kpi" id="holding-kpi"></div>
+        <div style="height:12px"></div>
+        <table><thead><tr><th>Empresa</th><th>Plan</th><th>Estado</th><th>Usuarios</th><th>Clientes</th><th>Cotizaciones</th><th>Aprobadas</th><th>Ventas aprobadas</th><th></th></tr></thead>
+        <tbody id="holding-body"></tbody></table>
+      </div>
+    </section>
+
+    <!-- INICIO / DASHBOARD de la empresa activa -->
+    <section id="s-inicio" class="section">
+      <div class="card">
+        <h2>📊 Resumen · <span id="ini-emp"></span></h2>
+        <div class="kpi" id="ini-kpi"></div>
+      </div>
+    </section>
+
+    <!-- CLIENTES (módulo demo: prueba la capa de datos por empresa) -->
+    <section id="s-clientes" class="section">
+      <div class="card">
+        <h2>👤 Clientes</h2>
+        <div class="row">
+          <div><label>Nombre *</label><input id="cl-nombre"></div>
+          <div><label>RUT</label><input id="cl-rut"></div>
+          <div><label>Teléfono</label><input id="cl-tel"></div>
+          <div><label>Email</label><input id="cl-mail"></div>
+          <div style="flex:0;min-width:auto;align-self:flex-end"><button class="btn-green" onclick="addCliente()">+ Guardar</button></div>
+        </div>
+        <div style="height:12px"></div>
+        <table><thead><tr><th>Nombre</th><th>RUT</th><th>Teléfono</th><th>Email</th><th></th></tr></thead>
+        <tbody id="cl-body"></tbody></table>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- SLOT: pega aquí los módulos de la v30 (cotizaciones, productos, -->
+    <!-- proveedores, Mercado Público, etc.). Reemplaza en su JS los     -->
+    <!-- accesos a localStorage/anon-key por los helpers tSel/tInsert/... -->
+    <!-- Ver docs/INTEGRACION_APP.md                                      -->
+    <!-- ============================================================= -->
+
+  </main>
+</div>
+
+<script>
+/* ============================================================================
+   CONFIGURACIÓN — completa con los datos de TU proyecto Supabase.
+   La anon key SOLO se usa como `apikey` y para el endpoint de login; el acceso
+   a los datos va autorizado con el JWT del usuario (RLS decide qué ve).
+============================================================================ */
+const SUPA_URL  = "<<TU_PROJECT_URL>>";     // ej. https://xxxx.supabase.co
+const SUPA_ANON = "<<TU_ANON_KEY>>";        // Project Settings → API → anon public
+
+/* ===== Contexto multiempresa en memoria ===== */
+let MT = { token:null, user:null, perfil:null, superAdmin:false,
+           memberships:[], empresa:null, rol:null };
+
+/* ===== Capa REST: siempre con el JWT del usuario ===== */
+function H(){ return { apikey:SUPA_ANON, Authorization:"Bearer "+(MT.token||SUPA_ANON), "Content-Type":"application/json" }; }
+async function rest(path, opts){ const r = await fetch(SUPA_URL+"/rest/v1/"+path, {headers:H(), ...opts});
+  if(!r.ok){ throw new Error(await r.text()); }
+  return r.status===204 ? null : r.json(); }
+
+/* Helpers scoping por empresa activa. Los SELECT ya están aislados por RLS;
+   filtramos por empresa_id además por eficiencia. Los INSERT/UPDATE inyectan
+   empresa_id de la empresa activa. */
+function empId(){ if(!MT.empresa) throw new Error("No hay empresa activa"); return MT.empresa.id; }
+function tSel(table, extra){ return rest(table+"?empresa_id=eq."+empId()+(extra?("&"+extra):"&select=*")); }
+function tInsert(table, row){ return rest(table, {method:"POST",
+  headers:{...H(), Prefer:"return=representation"}, body:JSON.stringify({...row, empresa_id:empId()})}); }
+function tUpdate(table, id, patch){ return rest(table+"?id=eq."+id+"&empresa_id=eq."+empId(), {method:"PATCH",
+  headers:{...H(), Prefer:"return=minimal"}, body:JSON.stringify(patch)}); }
+function tDelete(table, id){ return rest(table+"?id=eq."+id+"&empresa_id=eq."+empId(),
+  {method:"DELETE", headers:{...H(), Prefer:"return=minimal"}}); }
+/* Numeración por empresa (COT-00001 por cada empresa) */
+function siguienteNumero(tipo, prefijo){ return rest("rpc/siguiente_numero", {method:"POST",
+  body:JSON.stringify({p_empresa:empId(), p_tipo:tipo||"cotizacion", p_prefijo:prefijo||"COT"})}); }
+
+const $ = id => document.getElementById(id);
+const money = n => "$" + Math.round(n||0).toLocaleString("es-CL");
+
+/* ============================================================================
+   LOGIN (Supabase Auth) + carga de contexto
+============================================================================ */
+async function doLogin(){
+  const email=$("lg-email").value.trim(), pass=$("lg-pass").value;
+  $("lg-err").style.color="#64748b"; $("lg-err").textContent="Verificando…";
+  try{
+    const r = await fetch(SUPA_URL+"/auth/v1/token?grant_type=password", {
+      method:"POST", headers:{apikey:SUPA_ANON,"Content-Type":"application/json"},
+      body: JSON.stringify({email, password:pass})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error_description || j.msg || "Correo o clave incorrectos.");
+    MT.token = j.access_token; MT.user = j.user;
+    await cargarContexto();
+    $("lg-err").textContent=""; $("login").style.display="none"; $("app").style.display="block";
+    $("hdr-user").textContent = (MT.perfil && MT.perfil.nombre) ? MT.perfil.nombre : MT.user.email;
+    iniciarSesionUI();
+  }catch(e){ $("lg-err").style.color="var(--rojo)"; $("lg-err").textContent = e.message || String(e); }
+}
+
+async function cargarContexto(){
+  const p = await rest("perfiles?id=eq."+MT.user.id+"&select=*");
+  MT.perfil = p[0] || null;
+  MT.superAdmin = !!(MT.perfil && MT.perfil.es_super_admin);
+  // membresías + nombre de empresa (join vía PostgREST)
+  MT.memberships = await rest("membresias?activo=eq.true&select=rol,empresa_id,empresas(id,nombre,slug,plan,estado)");
+}
+
+function iniciarSesionUI(){
+  // Opciones del selector de empresa
+  let empresas = [];
+  if(MT.superAdmin){
+    // El holding ve todas; las cargamos del consolidado.
+    $("btn-holding").classList.remove("hidden");
+    rest("v_resumen_empresas?select=*").then(rows=>{
+      empresas = rows.map(r=>({id:r.id, nombre:r.nombre, plan:r.plan, estado:r.estado}));
+      poblarSelectorEmpresas(empresas, true);
+      renderHolding(rows);
+      go("holding");
+    }).catch(err=>fatal(err));
+    return;
+  }
+  empresas = MT.memberships.map(m=>({id:m.empresas.id, nombre:m.empresas.nombre, plan:m.empresas.plan, estado:m.empresas.estado, rol:m.rol}));
+  if(empresas.length===0){ fatal(new Error("Tu usuario no tiene empresas asignadas. Pide a un administrador que te dé de alta.")); return; }
+  poblarSelectorEmpresas(empresas, false);
+  cambiarEmpresa(empresas[0].id);
+}
+
+function poblarSelectorEmpresas(empresas, esSuper){
+  const sel=$("emp-select"); sel.innerHTML="";
+  if(esSuper){ const o=document.createElement("option"); o.value=""; o.textContent="— elige una empresa —"; sel.appendChild(o); }
+  empresas.forEach(e=>{ const o=document.createElement("option"); o.value=e.id; o.textContent=e.nombre+(e.estado!=="activa"?" ("+e.estado+")":""); sel.appendChild(o); });
+  sel.disabled = empresas.length<=1 && !esSuper;
+}
+
+function rolDeEmpresa(id){
+  if(MT.superAdmin) return "super_admin";
+  const m = MT.memberships.find(x=>x.empresas.id===id);
+  return m ? m.rol : null;
+}
+
+function cambiarEmpresa(id){
+  if(!id){ MT.empresa=null; return; }
+  const m = MT.memberships.find(x=>x.empresas.id===id);
+  MT.empresa = m ? {id:m.empresas.id, nombre:m.empresas.nombre} : {id, nombre:$("emp-select").selectedOptions[0].textContent};
+  MT.rol = rolDeEmpresa(id);
+  $("emp-select").value = id;
+  $("emp-rol").textContent = etiquetaRol(MT.rol);
+  buildNav();
+  go("inicio");
+}
+
+function etiquetaRol(r){ return ({super_admin:"Super Admin", admin_empresa:"Administrador", supervisor:"Supervisor", vendedor:"Vendedor", solo_lectura:"Solo lectura"})[r] || r || "—"; }
+
+function logout(){ MT={token:null,user:null,perfil:null,superAdmin:false,memberships:[],empresa:null,rol:null};
+  $("app").style.display="none"; $("login").style.display="flex"; $("lg-email").value=""; $("lg-pass").value=""; }
+
+function fatal(err){ $("lg-err").style.color="var(--rojo)"; $("lg-err").textContent=(err&&err.message)||String(err);
+  $("app").style.display="none"; $("login").style.display="flex"; }
+
+/* ============================================================================
+   NAVEGACIÓN (menú según rol) — la barrera real es RLS, esto sólo ordena la UI
+============================================================================ */
+const MODULES = [
+  {id:"inicio",   label:"📊 Inicio",       roles:["super_admin","admin_empresa","supervisor","vendedor","solo_lectura"]},
+  {id:"clientes", label:"👤 Clientes",     roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  // SLOT: añade aquí los módulos de la v30 con sus roles, p.ej.:
+  // {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  // {id:"productos",    label:"📦 Productos",    roles:["super_admin","admin_empresa","vendedor"]},
+];
+function buildNav(){
+  const nav=$("nav"); nav.innerHTML="";
+  MODULES.filter(m=>m.roles.includes(MT.rol)).forEach(m=>{
+    const b=document.createElement("button"); b.textContent=m.label; b.dataset.id=m.id; b.onclick=()=>go(m.id); nav.appendChild(b);
+  });
+}
+function go(id){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  const sec=$("s-"+id); if(sec) sec.classList.add("active");
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
+  if(id==="inicio")   renderInicio();
+  if(id==="clientes") renderClientes();
+  if(id==="holding")  { /* ya renderizado al entrar */ }
+}
+
+/* ============================================================================
+   PANEL HOLDING (super admin)
+============================================================================ */
+function renderHolding(rows){
+  const tot = rows.reduce((a,r)=>({emp:a.emp+1, cot:a.cot+Number(r.cotizaciones||0), ap:a.ap+Number(r.cotiz_aprobadas||0), ventas:a.ventas+Number(r.ventas_aprobadas||0)}), {emp:0,cot:0,ap:0,ventas:0});
+  $("holding-kpi").innerHTML =
+    kpi(tot.emp,"Empresas") + kpi(tot.cot,"Cotizaciones") + kpi(tot.ap,"Aprobadas") + kpi(money(tot.ventas),"Ventas aprobadas");
+  $("holding-body").innerHTML = rows.map(r=>`<tr>
+    <td>${esc(r.nombre)}</td><td>${esc(r.plan)}</td><td>${esc(r.estado)}</td>
+    <td>${r.usuarios}</td><td>${r.clientes}</td><td>${r.cotizaciones}</td><td>${r.cotiz_aprobadas}</td>
+    <td>${money(r.ventas_aprobadas)}</td>
+    <td><button class="btn-sec" onclick="entrarComo('${r.id}')">Entrar →</button></td></tr>`).join("")
+    || `<tr><td colspan="9" class="muted">Aún no hay empresas. Créalas con crear_empresa_con_admin().</td></tr>`;
+}
+function entrarComo(id){ $("emp-select").value=id; cambiarEmpresa(id); }
+
+/* ============================================================================
+   INICIO (dashboard de la empresa activa)
+============================================================================ */
+async function renderInicio(){
+  $("ini-emp").textContent = MT.empresa ? MT.empresa.nombre : "";
+  try{
+    const [cli, cot] = await Promise.all([
+      tSel("clientes","select=id"),
+      tSel("cotizaciones","select=id,estado")
+    ]);
+    const ap = cot.filter(c=>c.estado==="aprobada").length;
+    $("ini-kpi").innerHTML = kpi(cli.length,"Clientes") + kpi(cot.length,"Cotizaciones") + kpi(ap,"Aprobadas");
+  }catch(e){ $("ini-kpi").innerHTML = `<div class="muted">No se pudo cargar (${esc(e.message)})</div>`; }
+}
+
+/* ============================================================================
+   CLIENTES (módulo demo — patrón para todos los módulos de negocio)
+============================================================================ */
+async function renderClientes(){
+  try{
+    const list = await tSel("clientes","select=*&order=nombre");
+    $("cl-body").innerHTML = list.map(c=>`<tr>
+      <td>${esc(c.nombre)}</td><td>${esc(c.rut||"")}</td><td>${esc(c.telefono||"")}</td><td>${esc(c.email||"")}</td>
+      <td><button class="btn-red" onclick="delCliente('${c.id}')">✕</button></td></tr>`).join("")
+      || `<tr><td colspan="5" class="muted">Sin clientes en esta empresa.</td></tr>`;
+  }catch(e){ $("cl-body").innerHTML=`<tr><td colspan="5" class="muted">Error: ${esc(e.message)}</td></tr>`; }
+}
+async function addCliente(){
+  const nombre=$("cl-nombre").value.trim(); if(!nombre){ alert("Nombre obligatorio"); return; }
+  try{
+    await tInsert("clientes", {nombre, rut:$("cl-rut").value.trim(), telefono:$("cl-tel").value.trim(), email:$("cl-mail").value.trim()});
+    $("cl-nombre").value=$("cl-rut").value=$("cl-tel").value=$("cl-mail").value="";
+    renderClientes();
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+async function delCliente(id){ if(!confirm("¿Eliminar cliente?")) return;
+  try{ await tDelete("clientes", id); renderClientes(); }catch(e){ alert("No se pudo eliminar: "+e.message); } }
+
+/* ===== utilidades ===== */
+function kpi(v,l){ return `<div class="box"><b>${v}</b><span>${l}</span></div>`; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+</script>
+</body>
+</html>

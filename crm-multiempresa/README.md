@@ -13,8 +13,13 @@ la base sobre la que se adapta (ver checklist §7 del blueprint).
 ```
 crm-multiempresa/
 ├─ docs/
-│  └─ BLUEPRINT_ENTERPRISE.md    Documento maestro: arquitectura, seguridad,
-│                                roles, panel holding, migración y roadmap.
+│  ├─ BLUEPRINT_ENTERPRISE.md    Documento maestro: arquitectura, seguridad,
+│  │                             roles, panel holding, migración y roadmap.
+│  └─ INTEGRACION_APP.md         Cómo portar los módulos de la v30 al shell.
+├─ app/
+│  └─ index.html                 App shell multiempresa (referencia, funcional):
+│                                login Supabase Auth + empresa activa + panel
+│                                holding + capa de datos por empresa_id.
 └─ db/
    ├─ 01_schema_multiempresa.sql Esquema multi-tenant + RLS + funciones + vistas.
    ├─ 02_seed_demo.sql           Dos empresas de ejemplo para probar el aislamiento.
@@ -36,8 +41,9 @@ crm-multiempresa/
    ```sql
    select * from v_resumen_empresas;
    ```
-5. Adapta la app (login con Supabase Auth + empresa activa + tablas nuevas):
-   ver **§7 del blueprint**.
+5. Abre `app/index.html` (completa `SUPA_URL` y `SUPA_ANON`): tienes login real,
+   empresa activa, panel Holding y un módulo Clientes ya funcionando contra la
+   base. Para sumar los módulos de la v30 sigue **`docs/INTEGRACION_APP.md`**.
 
 ## Idea en una frase
 
