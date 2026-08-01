@@ -315,20 +315,21 @@ create trigger trg_nuevo_usuario after insert on auth.users
 --     Respetan RLS: un admin_empresa sólo ve su fila; el super admin ve todo.
 -- ============================================================================
 
+-- Subconsultas por empresa (NO joins) para evitar fan-out en las sumas.
 create or replace view v_resumen_empresas as
 select
   e.id, e.nombre, e.plan, e.estado,
-  count(distinct m.usuario_id)                                    as usuarios,
-  count(distinct cl.id)                                           as clientes,
-  count(distinct c.id)                                            as cotizaciones,
-  count(distinct c.id) filter (where c.estado = 'aprobada')       as cotiz_aprobadas,
-  coalesce(sum( (c.data->>'total')::numeric )
-           filter (where c.estado = 'aprobada'), 0)               as ventas_aprobadas
-from empresas e
-left join membresias  m  on m.empresa_id = e.id and m.activo
-left join clientes    cl on cl.empresa_id = e.id
-left join cotizaciones c on c.empresa_id = e.id
-group by e.id, e.nombre, e.plan, e.estado;
+  (select count(*) from membresias  m  where m.empresa_id = e.id and m.activo)     as usuarios,
+  (select count(*) from clientes    cl where cl.empresa_id = e.id)                 as clientes,
+  (select count(*) from cotizaciones c where c.empresa_id = e.id)                  as cotizaciones,
+  (select count(*) from cotizaciones c where c.empresa_id = e.id
+     and c.estado = 'aprobada')                                                    as cotiz_aprobadas,
+  -- 'total' puede venir con formato en datos migrados: extraemos solo dígitos.
+  (select coalesce(sum(
+      nullif(regexp_replace(coalesce(c.data->>'total',''), '[^0-9]', '', 'g'), '')::numeric
+    ), 0)
+   from cotizaciones c where c.empresa_id = e.id and c.estado = 'aprobada')        as ventas_aprobadas
+from empresas e;
 
 -- ============================================================================
 --  FIN. Recuerda: marca al menos un perfil como super admin, p.ej.:
