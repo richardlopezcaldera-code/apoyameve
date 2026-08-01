@@ -20,6 +20,8 @@ crm-multiempresa/
 │  └─ index.html                 App shell multiempresa (referencia, funcional):
 │                                login Supabase Auth + empresa activa + panel
 │                                holding + capa de datos por empresa_id.
+│                                Módulos portados: Clientes y Cotizaciones
+│                                (builder, catálogo, despacho, PDF, aprobación).
 └─ db/
    ├─ 01_schema_multiempresa.sql Esquema multi-tenant + RLS + funciones + vistas.
    ├─ 02_seed_demo.sql           Dos empresas de ejemplo para probar el aislamiento.

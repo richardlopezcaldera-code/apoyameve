@@ -17,6 +17,8 @@
   pegan en las secciones marcadas con  <!-- SLOT: ... -->  y usan los helpers
   tSel / tInsert / tUpdate / tDelete (ver más abajo). Guía: docs/INTEGRACION_APP.md
 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{--nav:#16324f;--nav2:#1f4468;--acc:#e8871e;--acc2:#cf7715;--azul:#2563eb;--verde:#16a34a;--gris:#eef1f5;--linea:#e2e8f0;--txt:#1f2937;--rojo:#c0392b;--oro:#c9962b;}
 *{box-sizing:border-box;font-family:'Segoe UI',Roboto,Arial,sans-serif;}
@@ -50,6 +52,23 @@ h2{color:var(--nav);margin-top:0;}
 .kpi{display:flex;gap:14px;flex-wrap:wrap;} .kpi .box{background:#fff;border-radius:12px;padding:16px;flex:1;min-width:150px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .kpi .box b{display:block;font-size:26px;color:var(--nav);} .kpi .box span{font-size:12px;color:#64748b;}
 .muted{color:#64748b;font-size:12px;}
+/* Cotizaciones */
+.searchbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+.builder{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.panel{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.panel h3{color:var(--nav);margin:0 0 8px;}
+.catlist{max-height:240px;overflow:auto;border:1px solid var(--linea);border-radius:8px;}
+.catlist .it{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-bottom:1px solid #f1f5f9;align-items:center;}
+.catlist .it small{color:#64748b;}
+.cli-wrap{position:relative;}
+.cli-results{position:absolute;z-index:5;background:#fff;border:1px solid var(--linea);border-radius:8px;width:100%;max-height:200px;overflow:auto;box-shadow:0 6px 20px rgba(0,0,0,.12);}
+.cli-results div{padding:6px 8px;cursor:pointer;font-size:13px;} .cli-results div:hover{background:#f1f5f9;}
+.mini{font-size:11px;color:#64748b;font-weight:400;}
+.est{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;}
+.est.p{background:#64748b;} .est.a{background:var(--verde);} .est.r{background:var(--rojo);}
+.right{text-align:right;} .big{font-weight:800;font-size:15px;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media(max-width:820px){.builder{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -124,12 +143,109 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
-    <!-- ============================================================= -->
-    <!-- SLOT: pega aquí los módulos de la v30 (cotizaciones, productos, -->
-    <!-- proveedores, Mercado Público, etc.). Reemplaza en su JS los     -->
-    <!-- accesos a localStorage/anon-key por los helpers tSel/tInsert/... -->
-    <!-- Ver docs/INTEGRACION_APP.md                                      -->
-    <!-- ============================================================= -->
+    <!-- COTIZACIONES -->
+    <section id="s-cotizaciones" class="section">
+      <div class="searchbar" style="justify-content:space-between">
+        <div>
+          <button class="btn" onclick="showBuilder()">🧾 Nueva / Editar</button>
+          <button class="btn-sec" onclick="showListado()">📋 Listado</button>
+        </div>
+        <div class="mini" id="builder-status"></div>
+      </div>
+
+      <!-- Vista builder -->
+      <div id="view-builder" class="builder">
+        <!-- Izquierda: catálogo + fuera de catálogo -->
+        <div class="panel">
+          <h3>1) Productos del catálogo</h3>
+          <div class="row" style="margin-bottom:8px">
+            <input id="b-prq" placeholder="Buscar producto, SKU o proveedor…" oninput="renderCat()">
+            <select id="b-prcat" onchange="renderCat()" style="max-width:200px"><option value="">Todas las categorías</option></select>
+          </div>
+          <div class="catlist" id="b-catlist"></div>
+          <div style="margin-top:14px;border-top:1px dashed #cbd5e1;padding-top:10px">
+            <div class="mini" style="font-weight:700;color:var(--nav);font-size:13px">Producto fuera de catálogo</div>
+            <div class="mini">Ingresa el COSTO neto — el % de venta de la derecha define el precio.</div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-nombre" placeholder="Nombre del producto" style="flex:2">
+              <input type="text" inputmode="decimal" id="b-fc-costo" placeholder="Costo (ej. 33.580)" style="max-width:130px">
+              <input type="number" id="b-fc-cant" value="1" min="1" style="max-width:70px">
+            </div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-prov" placeholder="Proveedor (opcional)">
+              <button class="btn" style="flex:0;white-space:nowrap" onclick="addFueraItem()">+ Agregar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Derecha: cliente + cotización -->
+        <div class="panel">
+          <h3>2) Cliente</h3>
+          <div class="cli-wrap" style="margin-bottom:6px">
+            <div class="row">
+              <input id="b-cli-search" autocomplete="off" placeholder="Buscar por RUT o nombre" oninput="buscarClienteInline()" onfocus="buscarClienteInline()">
+              <button class="btn-sec" style="flex:0;white-space:nowrap" onclick="guardarClienteInline()">💾 Crear / Guardar</button>
+            </div>
+            <div id="cli-results" class="cli-results hidden"></div>
+          </div>
+          <div id="cli-flag" class="mini"></div>
+          <label>Nombre de la empresa o institución *</label>
+          <input id="b-cli-nombre">
+          <div class="row" style="margin-top:6px">
+            <div><label>RUT</label><input id="b-cli-rut" placeholder="77.777.777-7"></div>
+            <div><label>Correo</label><input id="b-cli-correo"></div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div><label>Teléfono</label><input id="b-cli-tel"></div>
+            <div><label>Dirección / Región</label><input id="b-cli-dir"></div>
+          </div>
+          <label style="margin-top:6px">Comentarios (visibles al cliente)</label>
+          <textarea id="b-cli-coment" rows="2"></textarea>
+
+          <h3 style="margin-top:14px">3) Cotización</h3>
+          <div class="row">
+            <div style="flex:2"><label>N° cotización <span class="mini">(vacío = automático)</span></label><input id="b-num" placeholder="Automático"></div>
+            <div><label>% de venta <span class="mini">no se muestra al cliente</span></label><input type="number" id="b-pct" min="0" oninput="renderItems()"></div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div style="flex:0;min-width:170px"><label>Despacho (neto)</label>
+              <input type="text" inputmode="decimal" id="b-despacho" value="0" oninput="recalc()">
+              <select id="b-despmodo" onchange="renderItems()" style="margin-top:6px">
+                <option value="pct">Repartir proporcional (%)</option>
+                <option value="lineal">Repartir igual por unidad</option>
+              </select>
+            </div>
+            <div style="align-self:flex-end"><span class="mini">se reparte dentro del precio (no sale como línea)</span></div>
+          </div>
+
+          <div id="b-items" style="margin-top:12px"></div>
+
+          <div style="margin-top:12px;border-top:1px solid var(--linea);padding-top:10px">
+            <table>
+              <tr><td>Subtotal (neto)</td><td class="right" id="b-sub">$0</td></tr>
+              <tr><td>IVA</td><td class="right" id="b-iva">$0</td></tr>
+              <tr><td class="big">TOTAL</td><td class="right big" id="b-total">$0</td></tr>
+            </table>
+          </div>
+
+          <div class="actions">
+            <button class="btn" onclick="builderPDF()">📄 Presupuesto (PDF)</button>
+            <button class="btn-dark" onclick="builderSave()">💾 Guardar</button>
+            <button class="btn-green" onclick="builderWhatsApp()">WhatsApp</button>
+            <button class="btn-gray" onclick="nuevaCotiz()">Limpiar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vista listado -->
+      <div id="view-list" class="card hidden">
+        <div class="searchbar"><input id="cot-q" placeholder="🔍 Buscar por N°, cliente o estado" oninput="renderQuotes()"></div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th><th class="right">Total</th><th>Estado</th><th>OC</th><th>Acciones</th></tr></thead>
+          <tbody id="cot-body"></tbody></table>
+        </div>
+      </div>
+    </section>
 
   </main>
 </div>
@@ -232,15 +348,29 @@ function rolDeEmpresa(id){
   return m ? m.rol : null;
 }
 
-function cambiarEmpresa(id){
+async function cambiarEmpresa(id){
   if(!id){ MT.empresa=null; return; }
   const m = MT.memberships.find(x=>x.empresas.id===id);
   MT.empresa = m ? {id:m.empresas.id, nombre:m.empresas.nombre} : {id, nombre:$("emp-select").selectedOptions[0].textContent};
   MT.rol = rolDeEmpresa(id);
   $("emp-select").value = id;
   $("emp-rol").textContent = etiquetaRol(MT.rol);
+  CURR = null;                       // nueva empresa → limpiar builder
+  await cargarDatosEmpresa();        // config + catálogo + clientes de esta empresa
   buildNav();
   go("inicio");
+}
+
+/* Carga config, catálogo y clientes de la empresa activa (cachés en memoria) */
+async function cargarDatosEmpresa(){
+  try{ const e = await rest("empresas?id=eq."+empId()+"&select=nombre,rut,logo_url,config");
+       MT.empresaFull = e[0] || {}; MT.config = Object.assign({pct_venta:35, iva:19, moneda:"CLP"}, (e[0] && e[0].config) || {}); }
+  catch(_){ MT.empresaFull={}; MT.config={pct_venta:35, iva:19, moneda:"CLP"}; }
+  try{ CAT = await tSel("productos","select=*&deleted=eq.false&order=nombre"); }catch(_){ CAT=[]; }
+  try{ CLIENTES = await tSel("clientes","select=*&order=nombre"); }catch(_){ CLIENTES=[]; }
+  // categorías del catálogo para el filtro
+  const cats = [...new Set(CAT.map(p=>p.categoria).filter(Boolean))].sort();
+  const sel = $("b-prcat"); if(sel){ sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); }
 }
 
 function etiquetaRol(r){ return ({super_admin:"Super Admin", admin_empresa:"Administrador", supervisor:"Supervisor", vendedor:"Vendedor", solo_lectura:"Solo lectura"})[r] || r || "—"; }
@@ -257,8 +387,8 @@ function fatal(err){ $("lg-err").style.color="var(--rojo)"; $("lg-err").textCont
 const MODULES = [
   {id:"inicio",   label:"📊 Inicio",       roles:["super_admin","admin_empresa","supervisor","vendedor","solo_lectura"]},
   {id:"clientes", label:"👤 Clientes",     roles:["super_admin","admin_empresa","supervisor","vendedor"]},
-  // SLOT: añade aquí los módulos de la v30 con sus roles, p.ej.:
-  // {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  // SLOT: añade aquí más módulos de la v30 con sus roles, p.ej.:
   // {id:"productos",    label:"📦 Productos",    roles:["super_admin","admin_empresa","vendedor"]},
 ];
 function buildNav(){
@@ -271,9 +401,10 @@ function go(id){
   document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
   const sec=$("s-"+id); if(sec) sec.classList.add("active");
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
-  if(id==="inicio")   renderInicio();
-  if(id==="clientes") renderClientes();
-  if(id==="holding")  { /* ya renderizado al entrar */ }
+  if(id==="inicio")       renderInicio();
+  if(id==="clientes")     renderClientes();
+  if(id==="cotizaciones") { if(!CURR) nuevaCotiz(); else showBuilder(); }
+  if(id==="holding")      { /* ya renderizado al entrar */ }
 }
 
 /* ============================================================================
@@ -329,6 +460,255 @@ async function addCliente(){
 }
 async function delCliente(id){ if(!confirm("¿Eliminar cliente?")) return;
   try{ await tDelete("clientes", id); renderClientes(); }catch(e){ alert("No se pudo eliminar: "+e.message); } }
+
+/* ============================================================================
+   COTIZACIONES (portado de la v30 al modelo multiempresa)
+============================================================================ */
+let CURR = null;      // cotización en edición
+let CAT = [];         // catálogo (productos de la empresa activa)
+let CLIENTES = [];    // clientes de la empresa activa (caché de búsqueda)
+
+const ivaPct = () => Number(MT.config && MT.config.iva) || 19;
+function ventaUnit(costo, pct){ return Math.round((Number(costo)||0) * (1 + (Number(pct)||0)/100)); }
+function qBaseUnit(q, it){ return (it.precioFijo && it.precioFijo>0) ? it.precioFijo : ventaUnit(it.costo, q.pct); }
+function qDesp(q){
+  const desp = Number(q.despacho)||0, modo = (q.despMode==="lineal")?"lineal":"pct";
+  const base = (q.items||[]).reduce((a,it)=>a + qBaseUnit(q,it)*it.cantidad, 0);
+  const unid = (q.items||[]).reduce((a,it)=>a + (Number(it.cantidad)||0), 0);
+  return { modo,
+    factor:  (modo==="pct"    && base>0 && desp>0) ? desp/base : 0,
+    porUnidad:(modo==="lineal" && unid>0 && desp>0) ? desp/unid : 0 };
+}
+function qUnit(q, it){ const d=qDesp(q); return Math.round(qBaseUnit(q,it)*(1+d.factor) + d.porUnidad); }
+function quoteTotals(q){
+  const neto = (q.items||[]).reduce((a,it)=>a + qUnit(q,it)*it.cantidad, 0);
+  const iva = Math.round(neto*ivaPct()/100);
+  return { neto, iva, total: neto+iva };
+}
+const hoy = () => new Date().toISOString().slice(0,10);
+
+/* ----- Vistas ----- */
+function showBuilder(){ $("view-builder").classList.remove("hidden"); $("view-list").classList.add("hidden"); }
+function showListado(){ $("view-builder").classList.add("hidden"); $("view-list").classList.remove("hidden"); renderQuotes(); }
+
+/* ----- Nueva cotización ----- */
+function nuevaCotiz(){
+  CURR = { id:null, numero:"", fecha:hoy(), clienteId:null, items:[],
+           pct:Number(MT.config.pct_venta)||35, despacho:0, despMode:"pct", obs:"", estado:"pendiente" };
+  $("b-num").value=""; $("b-pct").value=CURR.pct; $("b-despacho").value=0; $("b-despmodo").value="pct";
+  ["b-cli-nombre","b-cli-rut","b-cli-correo","b-cli-tel","b-cli-dir","b-cli-coment","b-cli-search","b-prq"].forEach(id=>{ if($(id)) $(id).value=""; });
+  $("cli-flag").textContent=""; $("cli-results").classList.add("hidden");
+  renderCat(); renderItems(); showBuilder(); $("builder-status").textContent="Nueva cotización";
+}
+
+/* ----- Catálogo ----- */
+function renderCat(){
+  const q=($("b-prq").value||"").toLowerCase(), cat=$("b-prcat").value;
+  const list = CAT.filter(p => (!cat || p.categoria===cat) &&
+    (!q || (p.nombre||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q) || (p.proveedor||"").toLowerCase().includes(q))).slice(0,200);
+  $("b-catlist").innerHTML = list.map(p=>`<div class="it">
+      <div><b>${esc(p.nombre||"")}</b><br><small>${esc(p.sku||"")}${p.proveedor?(" · "+esc(p.proveedor)):""} · costo ${money(p.costo)}</small></div>
+      <button class="btn-sec" onclick="addCatItem('${p.id}')">+ Agregar</button></div>`).join("")
+    || `<div class="muted" style="padding:10px">Sin productos en el catálogo de esta empresa. Usa "fuera de catálogo".</div>`;
+}
+function addCatItem(pid){
+  const p = CAT.find(x=>x.id===pid); if(!p) return;
+  CURR.items.push({ productoId:p.id, nombre:p.nombre, sku:p.sku||"", proveedor:p.proveedor||"",
+                    costo:Number(p.costo)||0, precioFijo:0, cantidad:1, detalle:"" });
+  renderItems();
+}
+function addFueraItem(){
+  const nombre=$("b-fc-nombre").value.trim(); if(!nombre){ alert("Nombre del producto"); return; }
+  const costo=parseNum($("b-fc-costo").value), cant=Math.max(1, parseInt($("b-fc-cant").value)||1);
+  CURR.items.push({ productoId:null, nombre, sku:"", proveedor:$("b-fc-prov").value.trim(),
+                    costo, precioFijo:0, cantidad:cant, detalle:"" });
+  $("b-fc-nombre").value=$("b-fc-costo").value=$("b-fc-prov").value=""; $("b-fc-cant").value=1;
+  renderItems();
+}
+
+/* ----- Ítems ----- */
+function renderItems(){
+  if(!CURR) return;
+  CURR.pct = Number($("b-pct").value)||0; CURR.despacho = parseNum($("b-despacho").value); CURR.despMode = $("b-despmodo").value;
+  if(!CURR.items.length){ $("b-items").innerHTML = `<div class="muted">Agrega productos del catálogo o "fuera de catálogo".</div>`; recalc(); return; }
+  const rows = CURR.items.map((it,i)=>{ const pu=qUnit(CURR,it); return `<tr>
+      <td>${esc(it.nombre)}<br><input placeholder="Detalle (opcional)" value="${esc(it.detalle||"")}" oninput="setItemDetalle(${i},this.value)" style="margin-top:3px;font-size:11px"></td>
+      <td style="width:64px"><input type="number" min="1" value="${it.cantidad}" onchange="setItemCant(${i},this.value)"></td>
+      <td style="width:110px"><input type="text" inputmode="decimal" value="${pu}" onchange="setItemPrecio(${i},this.value)" title="Precio neto unitario"></td>
+      <td class="right" style="width:90px">${money(pu*it.cantidad)}</td>
+      <td style="width:34px"><button class="btn-red" onclick="delItem(${i})">✕</button></td></tr>`; }).join("");
+  $("b-items").innerHTML = `<table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio neto</th><th class="right">Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  recalc();
+}
+function setItemCant(i,v){ if(CURR.items[i]){ CURR.items[i].cantidad=Math.max(1,parseInt(v)||1); renderItems(); } }
+function setItemPrecio(i,v){ if(CURR.items[i]){ const n=parseNum(v); CURR.items[i].precioFijo=(n>0)?n:0; renderItems(); } }
+function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,200); }
+function delItem(i){ CURR.items.splice(i,1); renderItems(); }
+function recalc(){
+  if(!CURR) return;
+  CURR.pct=Number($("b-pct").value)||0; CURR.despacho=parseNum($("b-despacho").value); CURR.despMode=$("b-despmodo").value;
+  const t=quoteTotals(CURR);
+  $("b-sub").textContent=money(t.neto); $("b-iva").textContent=money(t.iva); $("b-total").textContent=money(t.total);
+}
+
+/* ----- Cliente inline (contra el caché CLIENTES de la empresa) ----- */
+function buscarClienteInline(){
+  const box=$("cli-results"), v=$("b-cli-search").value.trim();
+  if(!v){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  const qn=v.toLowerCase(), qr=cleanRut(v);
+  const m=CLIENTES.filter(c=> (c.nombre||"").toLowerCase().includes(qn) || (qr.length>=2 && cleanRut(c.rut).includes(qr))).slice(0,8);
+  box.innerHTML = m.map(c=>`<div onclick="selectCliente('${c.id}')"><b>${esc(c.nombre)}</b> · ${esc(c.rut||"")}${c.telefono?(" · "+esc(c.telefono)):""}</div>`).join("")
+    || `<div class="muted" style="padding:6px 8px">No existe — completa los datos y presiona "Crear / Guardar".</div>`;
+  box.classList.remove("hidden");
+}
+function selectCliente(id){
+  const c=CLIENTES.find(x=>x.id===id); if(!c) return;
+  $("b-cli-nombre").value=c.nombre; $("b-cli-rut").value=c.rut||""; $("b-cli-correo").value=c.email||"";
+  $("b-cli-tel").value=c.telefono||""; $("b-cli-dir").value=c.direccion||"";
+  CURR.clienteId=c.id; $("cli-results").classList.add("hidden"); $("b-cli-search").value=(c.rut?c.rut+" · ":"")+c.nombre;
+  $("cli-flag").textContent="✓ Cliente cargado: "+c.nombre;
+}
+async function ensureCliente(requireRut){
+  const nombre=$("b-cli-nombre").value.trim(); let rut=$("b-cli-rut").value.trim();
+  if(!nombre){ if(requireRut) alert("Ingresa el nombre del cliente."); return null; }
+  if(rut){ if(!validRut(rut)){ alert("RUT inválido (dígito verificador)."); return null; } rut=formatRut(rut); }
+  else if(requireRut){ alert("El RUT es obligatorio para guardar el cliente."); return null; }
+  const payload={ nombre, rut, direccion:$("b-cli-dir").value.trim(), telefono:$("b-cli-tel").value.trim(), email:$("b-cli-correo").value.trim() };
+  let existing = CURR.clienteId ? CLIENTES.find(c=>c.id===CURR.clienteId) : (rut?CLIENTES.find(c=>cleanRut(c.rut)===cleanRut(rut)):null);
+  let saved;
+  try{
+    if(existing){ await tUpdate("clientes", existing.id, payload); saved={...existing, ...payload}; }
+    else { const r=await tInsert("clientes", payload); saved=Array.isArray(r)?r[0]:r; }
+  }catch(e){ alert("No se pudo guardar el cliente: "+e.message); return null; }
+  CURR.clienteId=saved.id;
+  CLIENTES = await tSel("clientes","select=*&order=nombre");
+  return saved;
+}
+async function guardarClienteInline(){
+  const c=await ensureCliente(true);
+  if(c){ $("cli-results").classList.add("hidden"); $("b-cli-search").value=(c.rut?c.rut+" · ":"")+c.nombre; $("cli-flag").textContent="✓ Cliente guardado: "+c.nombre; renderClientes(); }
+}
+
+/* ----- Guardar cotización ----- */
+function collectQuote(){
+  CURR.obs=$("b-cli-coment").value.trim(); CURR.pct=Number($("b-pct").value)||0;
+  CURR.despacho=parseNum($("b-despacho").value); CURR.despMode=$("b-despmodo").value;
+  const manual=$("b-num").value.trim(); if(manual) CURR.numero=manual;
+}
+async function builderSave(){
+  if(!CURR.items.length){ alert("Agrega al menos un producto."); return; }
+  await ensureCliente(false);                 // guarda/actualiza el cliente si hay nombre
+  collectQuote();
+  $("builder-status").textContent="Guardando…";
+  try{
+    if(!CURR.numero) CURR.numero = await siguienteNumero("cotizacion","COT");
+    const t=quoteTotals(CURR);
+    const row={ numero:CURR.numero, fecha:CURR.fecha, cliente_id:CURR.clienteId||null,
+      vendedor_id:MT.user.id, vendedor_name:(MT.perfil&&MT.perfil.nombre)||MT.user.email,
+      items:CURR.items, despacho:CURR.despacho, pct:CURR.pct, obs:CURR.obs, estado:CURR.estado||"pendiente",
+      data:{ total:t.total, neto:t.neto, iva:t.iva, despMode:CURR.despMode } };
+    if(CURR.id){ await tUpdate("cotizaciones", CURR.id, row); }
+    else { const r=await tInsert("cotizaciones", row); const saved=Array.isArray(r)?r[0]:r; CURR.id=saved.id; }
+    $("b-num").value=CURR.numero; $("builder-status").textContent="Guardada: "+CURR.numero;
+  }catch(e){ $("builder-status").textContent=""; alert("No se pudo guardar: "+e.message); }
+}
+function builderWhatsApp(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  const t=quoteTotals(CURR);
+  const lineas=CURR.items.map(it=>`• ${it.nombre} x${it.cantidad}: ${money(qUnit(CURR,it)*it.cantidad)}`).join("%0A");
+  const tel=(MT.config.telefono||"").replace(/[^0-9]/g,"");
+  const txt=`Cotización ${CURR.numero||""}%0A${lineas}%0ATOTAL: ${money(t.total)} (IVA incl.)`;
+  window.open("https://wa.me/"+tel+"?text="+txt, "_blank");
+}
+
+/* ----- Listado ----- */
+function badge(e){ const k=e==="aprobada"?"a":(e==="rechazada"?"r":"p"); return `<span class="est ${k}">${esc(e||"pendiente")}</span>`; }
+function puedeAprobar(){ return ["super_admin","admin_empresa","supervisor"].includes(MT.rol); }
+async function renderQuotes(){
+  const q=($("cot-q").value||"").toLowerCase();
+  let list;
+  try{ list = await tSel("cotizaciones","select=*&order=fecha.desc"); }catch(e){ $("cot-body").innerHTML=`<tr><td colspan="8" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const byId={}; CLIENTES.forEach(c=>byId[c.id]=c);
+  list = list.filter(x=>{ const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||""; return !q || (x.numero||"").toLowerCase().includes(q) || cn.toLowerCase().includes(q) || (x.estado||"").toLowerCase().includes(q); });
+  $("cot-body").innerHTML = list.map(x=>{
+    const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||"—", total=(x.data&&x.data.total)||0;
+    const acc = `<button class="btn-sec" onclick="pdfQuote('${x.id}')">PDF</button> `
+      + `<button class="btn-sec" onclick="editQuote('${x.id}')">Editar</button> `
+      + ((puedeAprobar() && x.estado==="pendiente") ? `<button class="btn-green" onclick="aprobar('${x.id}')">Aprobar</button> <button class="btn-red" onclick="rechazar('${x.id}')">Rechazar</button>` : "");
+    return `<tr><td>${esc(x.numero||"")}</td><td>${esc(x.fecha||"")}</td><td>${esc(cn)}</td><td>${esc(x.vendedor_name||"")}</td>
+      <td class="right">${money(total)}</td><td>${badge(x.estado)}</td><td>${esc(x.oc_numero||"")}</td><td>${acc}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">Sin cotizaciones en esta empresa.</td></tr>`;
+}
+async function fetchQuote(id){ const r=await tSel("cotizaciones","id=eq."+id+"&select=*"); return r[0]; }
+async function editQuote(id){
+  const q=await fetchQuote(id); if(!q) return;
+  CURR={ id:q.id, numero:q.numero||"", fecha:q.fecha||hoy(), clienteId:q.cliente_id||null, items:q.items||[],
+         pct:Number(q.pct)||35, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct", obs:q.obs||"", estado:q.estado||"pendiente", oc_numero:q.oc_numero };
+  $("b-num").value=CURR.numero; $("b-pct").value=CURR.pct; $("b-despacho").value=CURR.despacho; $("b-despmodo").value=CURR.despMode;
+  $("b-cli-coment").value=CURR.obs;
+  const c=CLIENTES.find(x=>x.id===CURR.clienteId);
+  if(c){ selectCliente(c.id); } else { ["b-cli-nombre","b-cli-rut","b-cli-correo","b-cli-tel","b-cli-dir","b-cli-search"].forEach(id=>$(id).value=""); }
+  renderCat(); renderItems(); showBuilder(); $("builder-status").textContent="Editando "+CURR.numero;
+}
+async function aprobar(id){
+  if(!puedeAprobar()) return;
+  const oc=prompt("N° de Orden de Compra (manual):"); if(oc===null||!oc.trim()) return;
+  try{ await tUpdate("cotizaciones", id, { estado:"aprobada", oc_numero:oc.trim(), aprobada_fecha:hoy() }); renderQuotes(); }
+  catch(e){ alert("No se pudo aprobar: "+e.message); }
+}
+async function rechazar(id){
+  if(!puedeAprobar()) return;
+  if(!confirm("¿Rechazar esta cotización?")) return;
+  try{ await tUpdate("cotizaciones", id, { estado:"rechazada" }); renderQuotes(); }
+  catch(e){ alert("No se pudo rechazar: "+e.message); }
+}
+
+/* ----- PDF (jsPDF + autotable) ----- */
+function empresaPDFHeader(){ const e=MT.empresaFull||{}, c=MT.config||{};
+  return { nombre:e.nombre||(MT.empresa&&MT.empresa.nombre)||"", rut:e.rut||c.rut||"",
+           direccion:c.direccion||"", telefono:c.telefono||"", emails:c.emails||"", web:c.web||"", bancos:c.bancos||[] }; }
+function pdfCotizacion(q, cli, out){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader(); const t=quoteTotals(q);
+  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa", 14, 18);
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(80);
+  doc.text([H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono?("Tel: "+H.telefono):"", H.emails, H.web].filter(Boolean), 14, 24);
+  doc.setFont(undefined,'bold'); doc.setFontSize(16); doc.setTextColor(22,50,79); doc.text("PRESUPUESTO", 196, 16, {align:'right'});
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80);
+  doc.text(["N°: "+(q.numero||""), "Fecha: "+(q.fecha||"")], 196, 23, {align:'right'});
+  let y=44; doc.setFontSize(9); doc.setTextColor(30);
+  const cinfo=`Cliente: ${cli.nombre||""}  |  RUT: ${cli.rut||""}  |  Correo: ${cli.email||""}  |  Tel: ${cli.telefono||""}`;
+  const cl=doc.splitTextToSize(cinfo,182); doc.text(cl,14,y); y+=cl.length*4+3;
+  const body=q.items.map(it=>{ const p=qUnit(q,it); const nom=it.nombre+((it.detalle&&it.detalle.trim())?("\n"+it.detalle.trim()):""); return [nom, it.cantidad, money(p), money(p*it.cantidad)]; });
+  doc.autoTable({ startY:y, head:[["Producto","Cant.","Precio neto","Total"]], body,
+    styles:{fontSize:9,valign:"middle"}, headStyles:{fillColor:[22,50,79]},
+    columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9},
+    body:[["Subtotal neto",money(t.neto)],["IVA "+ivaPct()+"%",money(t.iva)],["TOTAL",money(t.total)]],
+    columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
+  let ey=doc.lastAutoTable.finalY+8; doc.setTextColor(50);
+  if(q.obs){ doc.setFontSize(8); const o=doc.splitTextToSize("Observaciones: "+q.obs,182); doc.text(o,14,ey); ey+=o.length*3.5+3; }
+  if(H.bancos.length){ doc.setFontSize(8); doc.setTextColor(30); doc.text("Datos para transferencia:",14,ey); ey+=4; doc.setFontSize(7.5); doc.setTextColor(60); H.bancos.forEach(b=>{ doc.text("• "+b,14,ey); ey+=3.6; }); }
+  ey+=3; doc.setFontSize(7.5); doc.setTextColor(90);
+  doc.text(doc.splitTextToSize("Precios en CLP, netos + IVA ("+ivaPct()+"%). Presupuesto válido 15 días. Precios y stock sujetos a confirmación.",182),14,ey);
+  if(out==="save") doc.save((q.numero||"cotizacion")+".pdf"); else doc.output("dataurlnewwindow");
+}
+function builderPDF(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  collectQuote();
+  const cli={ nombre:$("b-cli-nombre").value.trim(), rut:$("b-cli-rut").value.trim(), email:$("b-cli-correo").value.trim(), telefono:$("b-cli-tel").value.trim() };
+  pdfCotizacion(CURR, cli, "save");
+}
+async function pdfQuote(id){
+  const q=await fetchQuote(id); if(!q) return;
+  const cli=CLIENTES.find(c=>c.id===q.cliente_id)||{};
+  pdfCotizacion({ items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct", numero:q.numero, fecha:q.fecha, obs:q.obs }, cli, "save");
+}
+
+/* ----- Utilidades RUT / números (portadas de la v30) ----- */
+function cleanRut(r){ return (r||"").replace(/[^0-9kK]/g,"").toUpperCase(); }
+function formatRut(r){ r=cleanRut(r); if(r.length<2) return r; const dv=r.slice(-1); let num=r.slice(0,-1), out=""; while(num.length>3){ out="."+num.slice(-3)+out; num=num.slice(0,-3); } return num+out+"-"+dv; }
+function validRut(r){ r=cleanRut(r); if(r.length<2) return false; const dv=r.slice(-1), num=r.slice(0,-1); if(!/^\d+$/.test(num)) return false; let s=1,m=0; for(let i=num.length-1;i>=0;i--){ s=(s+parseInt(num[i])*(9-m%6))%11; m++; } const calc=s?String(s-1):"K"; return calc===dv; }
+function parseNum(v){ if(typeof v==="number") return v; v=String(v).trim(); if(!v) return 0; v=v.replace(/\s/g,"").replace(/\./g,"").replace(",","."); const n=parseFloat(v); return isNaN(n)?0:n; }
 
 /* ===== utilidades ===== */
 function kpi(v,l){ return `<div class="box"><b>${v}</b><span>${l}</span></div>`; }

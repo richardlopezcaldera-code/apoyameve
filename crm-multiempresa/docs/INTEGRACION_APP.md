@@ -78,6 +78,22 @@ crean/gestionan en **Supabase Auth** y se asignan a empresas con `membresias`
 (un admin_empresa puede hacerlo por UI vía `insert into membresias ...`, ya
 permitido por RLS).
 
+## 6b. Estado de los módulos portados
+
+- **Clientes** ✅ (módulo demo del patrón de datos).
+- **Cotizaciones** ✅ — builder con catálogo de la empresa + ítems fuera de
+  catálogo, precio neto editable por línea, detalle, **despacho** repartido
+  proporcional o lineal (misma matemática que la v30), totales con IVA de
+  `empresas.config`, cliente inline, numeración por empresa (`siguiente_numero`),
+  **PDF** (jsPDF), listado con búsqueda y **aprobar/rechazar** (según rol).
+  El total se guarda en `cotizaciones.data.total` (lo consume el panel Holding).
+- **Pendientes** (mismo patrón): Productos, Proveedores, Órdenes de compra,
+  Notas de pedido, Resúmenes y Mercado Público / Compra Ágil.
+
+> Nota PDF: esta versión genera un PDF limpio sin incrustar imágenes de producto
+> (la v30 usaba proxies CORS externos). Si se requieren imágenes en el PDF, se
+> añade la precarga de imágenes por proxy como en la v30.
+
 ## 7. Prueba de humo
 
 1. Entra con un usuario de una sola empresa → ves el menú y sus Clientes.
