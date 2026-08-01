@@ -343,8 +343,13 @@ h2{color:var(--nav);margin-top:0;}
    La anon key SOLO se usa como `apikey` y para el endpoint de login; el acceso
    a los datos va autorizado con el JWT del usuario (RLS decide qué ve).
 ============================================================================ */
-const SUPA_URL  = "<<TU_PROJECT_URL>>";     // ej. https://xxxx.supabase.co
-const SUPA_ANON = "<<TU_ANON_KEY>>";        // Project Settings → API → anon public
+// La URL del proyecto es pública. La anon key NO se versiona (aunque es pública por
+// diseño, evitamos guardarla en el repo). Opciones para inyectarla al desplegar:
+//   a) reemplaza <<PEGA_TU_ANON_KEY>> por tu anon key en el archivo que publiques, o
+//   b) déjala y ejecútalo una vez en la consola del navegador:
+//        localStorage.setItem('SUPA_ANON','tu_anon_key')
+const SUPA_URL  = localStorage.getItem('SUPA_URL')  || "https://htjjxqvzxkrabozopxhe.supabase.co";
+const SUPA_ANON = localStorage.getItem('SUPA_ANON') || "<<PEGA_TU_ANON_KEY>>";
 
 /* ===== Contexto multiempresa en memoria ===== */
 let MT = { token:null, user:null, perfil:null, superAdmin:false,
