@@ -26,7 +26,10 @@ crm-multiempresa/
    ├─ 01_schema_multiempresa.sql Esquema multi-tenant + RLS + funciones + vistas.
    ├─ 02_seed_demo.sql           Dos empresas de ejemplo para probar el aislamiento.
    ├─ 03_migracion_kam.sql       Importa los datos de una v30 (tablas kam_*) como
-   │                             un tenant más.
+   │                             un tenant más (no destructivo).
+   ├─ 04_catalogo_kamiana.sql    Carga los 1439 productos del catálogo de la v30
+   │                             en la empresa 'kamiana'. Idempotente y no
+   │                             destructivo (no duplica ni modifica lo existente).
    └─ tests/                     Arnés de validación local (RLS/aislamiento) —
                                  esquema probado en PostgreSQL 16, todo en verde.
 ```

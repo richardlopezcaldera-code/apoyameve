@@ -87,8 +87,22 @@ permitido por RLS).
   `empresas.config`, cliente inline, numeración por empresa (`siguiente_numero`),
   **PDF** (jsPDF), listado con búsqueda y **aprobar/rechazar** (según rol).
   El total se guarda en `cotizaciones.data.total` (lo consume el panel Holding).
-- **Pendientes** (mismo patrón): Productos, Proveedores, Órdenes de compra,
-  Notas de pedido, Resúmenes y Mercado Público / Compra Ágil.
+- **Productos** ✅ — catálogo por empresa: listado con búsqueda, **edición en
+  línea** (categoría/costo/precio/proveedor) con guardado por lotes, alta/edición
+  por diálogo, borrado e **importar/exportar CSV** (la importación **agrega**, no
+  borra). Alimenta el catálogo del builder de Cotizaciones.
+- **Pendientes** (mismo patrón): Proveedores, Órdenes de compra, Notas de
+  pedido, Resúmenes y Mercado Público / Compra Ágil.
+
+### Traer TODO el catálogo y los datos sin tocar lo ya creado
+
+- **Catálogo completo (1439 productos)**: ejecuta `../db/04_catalogo_kamiana.sql`.
+  Es **idempotente y no destructivo** — inserta por `legacy_id` sólo lo que falta;
+  correrlo dos veces no duplica ni modifica nada. Validado: 1ª vez carga 1439, 2ª
+  vez carga 0.
+- **Clientes / cotizaciones históricas**: `../db/03_migracion_kam.sql` (también no
+  destructivo, guarda `legacy_id`). Tu Supabase v30 original **no se modifica**:
+  sólo se exporta y se copia al sistema nuevo.
 
 > Nota PDF: esta versión genera un PDF limpio sin incrustar imágenes de producto
 > (la v30 usaba proxies CORS externos). Si se requieren imágenes en el PDF, se

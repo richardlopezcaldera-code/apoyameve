@@ -247,7 +247,56 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
+    <!-- PRODUCTOS -->
+    <section id="s-productos" class="section">
+      <div class="card">
+        <h2>📦 Productos (catálogo)</h2>
+        <div class="searchbar">
+          <input id="pr-q" placeholder="Buscar producto, categoría, proveedor o SKU" oninput="renderProductos()">
+          <button class="btn-dark" onclick="openProducto()">+ Agregar</button>
+          <button class="btn" id="pr-save" onclick="guardarCambiosProd()" style="display:none"></button>
+          <button class="btn-gray" id="pr-undo" onclick="descartarCambiosProd()" style="display:none">Descartar</button>
+          <button class="btn-sec" onclick="$('pr-import').click()">Importar CSV</button>
+          <input type="file" id="pr-import" accept=".csv" class="hidden" onchange="importProductosCSV(event)">
+          <button class="btn-sec" onclick="exportProductosCSV()">Exportar CSV</button>
+          <span class="mini" id="pr-count"></span>
+        </div>
+        <p class="mini">Edición en línea: cambia categoría, costo, precio o proveedor y presiona <b>💾 Guardar cambios</b>. "Precio" en 0 = se calcula con el % de venta. Importar CSV <b>agrega</b> (no borra lo existente).</p>
+        <div style="overflow:auto;max-height:60vh">
+          <table><thead><tr><th>Nombre</th><th>SKU</th><th>Categoría</th><th class="right">Costo</th><th class="right">Precio</th><th>Proveedor</th><th></th></tr></thead>
+          <tbody id="pr-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- Diálogo alta/edición de producto -->
+  <dialog id="dlg-pr" style="border:none;border-radius:14px;padding:0;width:min(560px,94vw)">
+    <form method="dialog" style="margin:0">
+      <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700" id="dlg-pr-h">Nuevo producto</div>
+      <div style="padding:18px">
+        <input type="hidden" id="p-id">
+        <label>Nombre *</label><input id="p-nombre">
+        <div class="row" style="margin-top:6px">
+          <div><label>SKU</label><input id="p-sku"></div>
+          <div><label>Categoría</label><input id="p-cat"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Costo neto</label><input type="text" inputmode="decimal" id="p-costo"></div>
+          <div><label>Precio (0 = por %)</label><input type="text" inputmode="decimal" id="p-precio"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Proveedor</label><input id="p-prov"></div>
+          <div><label>Imagen (URL)</label><input id="p-img"></div>
+        </div>
+        <div class="actions" style="justify-content:flex-end">
+          <button class="btn-gray" value="cancel">Cancelar</button>
+          <button class="btn-green" value="ok" onclick="event.preventDefault();saveProducto()">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 </div>
 
 <script>
@@ -388,8 +437,8 @@ const MODULES = [
   {id:"inicio",   label:"📊 Inicio",       roles:["super_admin","admin_empresa","supervisor","vendedor","solo_lectura"]},
   {id:"clientes", label:"👤 Clientes",     roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
-  // SLOT: añade aquí más módulos de la v30 con sus roles, p.ej.:
-  // {id:"productos",    label:"📦 Productos",    roles:["super_admin","admin_empresa","vendedor"]},
+  {id:"productos", label:"📦 Productos", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  // SLOT: añade aquí más módulos de la v30 con sus roles.
 ];
 function buildNav(){
   const nav=$("nav"); nav.innerHTML="";
@@ -404,6 +453,7 @@ function go(id){
   if(id==="inicio")       renderInicio();
   if(id==="clientes")     renderClientes();
   if(id==="cotizaciones") { if(!CURR) nuevaCotiz(); else showBuilder(); }
+  if(id==="productos")    renderProductos();
   if(id==="holding")      { /* ya renderizado al entrar */ }
 }
 
@@ -709,6 +759,128 @@ function cleanRut(r){ return (r||"").replace(/[^0-9kK]/g,"").toUpperCase(); }
 function formatRut(r){ r=cleanRut(r); if(r.length<2) return r; const dv=r.slice(-1); let num=r.slice(0,-1), out=""; while(num.length>3){ out="."+num.slice(-3)+out; num=num.slice(0,-3); } return num+out+"-"+dv; }
 function validRut(r){ r=cleanRut(r); if(r.length<2) return false; const dv=r.slice(-1), num=r.slice(0,-1); if(!/^\d+$/.test(num)) return false; let s=1,m=0; for(let i=num.length-1;i>=0;i--){ s=(s+parseInt(num[i])*(9-m%6))%11; m++; } const calc=s?String(s-1):"K"; return calc===dv; }
 function parseNum(v){ if(typeof v==="number") return v; v=String(v).trim(); if(!v) return 0; v=v.replace(/\s/g,"").replace(/\./g,"").replace(",","."); const n=parseFloat(v); return isNaN(n)?0:n; }
+function fmtN(n){ return (Math.round(Number(n)||0)).toLocaleString("es-CL"); }
+
+/* ============================================================================
+   PRODUCTOS (catálogo por empresa)
+============================================================================ */
+const dlgPr = () => document.getElementById("dlg-pr");
+let PROD_PEND = {};   // ediciones en línea pendientes de guardar {id:{campo:valor}}
+
+function renderProductos(){
+  const q=($("pr-q").value||"").toLowerCase();
+  const list = CAT.filter(p => (p.nombre||"").toLowerCase().includes(q) || (p.categoria||"").toLowerCase().includes(q)
+    || (p.proveedor||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q)).slice(0,500);
+  $("pr-count").textContent = CAT.length+" productos"+(CAT.length>500?" (mostrando 500)":"");
+  $("pr-body").innerHTML = list.map(p=>`<tr data-id="${p.id}">
+    <td>${esc(p.nombre||"")}</td><td class="mini">${esc(p.sku||"")}</td>
+    <td><input value="${esc(p.categoria||"")}" onchange="editProd('${p.id}','categoria',this.value)"></td>
+    <td class="right"><input type="text" inputmode="decimal" value="${fmtN(p.costo||0)}" onchange="editProd('${p.id}','costo',this.value)" style="text-align:right"></td>
+    <td class="right"><input type="text" inputmode="decimal" value="${fmtN(p.precio||0)}" onchange="editProd('${p.id}','precio',this.value)" style="text-align:right"></td>
+    <td><input value="${esc(p.proveedor||"")}" onchange="editProd('${p.id}','proveedor',this.value)"></td>
+    <td><button class="btn-sec" onclick="openProducto('${p.id}')">✎</button> <button class="btn-red" onclick="delProd('${p.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">Sin resultados.</td></tr>`;
+  pintarPendientes();
+}
+function editProd(id,f,v){
+  const val=(f==="costo"||f==="precio")?parseNum(v):v;
+  const p=CAT.find(x=>x.id===id); if(!p) return;
+  if(String(p[f]==null?"":p[f])===String(val)){ if(PROD_PEND[id]){ delete PROD_PEND[id][f]; if(!Object.keys(PROD_PEND[id]).length) delete PROD_PEND[id]; } }
+  else { PROD_PEND[id]=PROD_PEND[id]||{}; PROD_PEND[id][f]=val; }
+  pintarPendientes();
+}
+function pintarPendientes(){
+  const n=Object.keys(PROD_PEND).length, b=$("pr-save"), u=$("pr-undo");
+  if(b){ b.style.display=n?"":"none"; b.textContent="💾 Guardar cambios ("+n+")"; }
+  if(u){ u.style.display=n?"":"none"; }
+  document.querySelectorAll("#pr-body tr").forEach(tr=>{ const id=tr.dataset.id; tr.style.background=(id&&PROD_PEND[id])?"#fff7e6":""; });
+}
+async function guardarCambiosProd(){
+  const ids=Object.keys(PROD_PEND); if(!ids.length){ alert("No hay cambios pendientes."); return; }
+  try{
+    for(const id of ids){ await tUpdate("productos", id, PROD_PEND[id]); const p=CAT.find(x=>x.id===id); if(p) Object.assign(p, PROD_PEND[id]); }
+    PROD_PEND={}; renderProductos(); refrescarCatUI();
+    alert("Guardado: "+ids.length+" producto(s) actualizado(s).");
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+function descartarCambiosProd(){ if(!Object.keys(PROD_PEND).length) return; if(!confirm("¿Descartar los cambios sin guardar?")) return; PROD_PEND={}; renderProductos(); }
+async function delProd(id){
+  if(!confirm("¿Eliminar producto?")) return;
+  try{ await tDelete("productos", id); CAT=CAT.filter(x=>x.id!==id); delete PROD_PEND[id]; renderProductos(); refrescarCatUI(); }
+  catch(e){ alert("No se pudo eliminar: "+e.message); }
+}
+function openProducto(id){
+  const p=id?CAT.find(x=>x.id===id):null;
+  $("p-id").value=p?p.id:""; $("p-nombre").value=p?p.nombre:""; $("p-sku").value=p?(p.sku||""):"";
+  $("p-cat").value=p?(p.categoria||""):""; $("p-prov").value=p?(p.proveedor||""):"";
+  $("p-costo").value=p?fmtN(p.costo||0):""; $("p-precio").value=p?fmtN(p.precio||0):"0"; $("p-img").value=p?(p.imagen||""):"";
+  $("dlg-pr-h").textContent=p?"Editar producto":"Nuevo producto";
+  dlgPr().showModal();
+}
+async function saveProducto(){
+  const nombre=$("p-nombre").value.trim(); if(!nombre){ alert("El nombre es obligatorio."); return; }
+  const datos={ nombre, sku:$("p-sku").value.trim(), categoria:$("p-cat").value.trim(),
+    costo:parseNum($("p-costo").value), precio:parseNum($("p-precio").value),
+    proveedor:$("p-prov").value.trim(), imagen:$("p-img").value.trim() };
+  const id=$("p-id").value;
+  try{
+    if(id){ await tUpdate("productos", id, datos); const p=CAT.find(x=>x.id===id); if(p) Object.assign(p, datos); }
+    else { const r=await tInsert("productos", datos); const saved=Array.isArray(r)?r[0]:r; CAT.push(saved); }
+    dlgPr().close(); CAT.sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||"")); renderProductos(); refrescarCatUI();
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+/* Refresca las categorías del builder y su lista si está abierto */
+function refrescarCatUI(){
+  const cats=[...new Set(CAT.map(p=>p.categoria).filter(Boolean))].sort();
+  const sel=$("b-prcat"); if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); sel.value=cur; }
+  if($("b-catlist")) renderCat();
+}
+/* CSV: exportar el catálogo de la empresa */
+function exportProductosCSV(){
+  const rows=[["Nombre","SKU","Categoria","Costo","Precio","Proveedor","Imagen"]]
+    .concat(CAT.map(p=>[p.nombre,p.sku||"",p.categoria||"",p.costo||0,p.precio||0,p.proveedor||"",p.imagen||""]));
+  const csv=rows.map(r=>r.map(v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,﻿"+encodeURIComponent(csv);
+  a.download="catalogo_"+((MT.empresa&&MT.empresa.nombre)||"empresa")+".csv"; a.click();
+}
+/* CSV: importar (AGREGA, no borra). Espera cabecera con Nombre/SKU/Categoria/Costo/Precio/Proveedor */
+function importProductosCSV(ev){
+  const f=ev.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=async ()=>{
+    try{
+      const rows=parseCSV(String(rd.result)); if(rows.length<2){ alert("CSV vacío."); ev.target.value=""; return; }
+      const head=rows[0].map(h=>h.trim().toLowerCase());
+      const ix=n=>head.findIndex(h=>h===n);
+      const iN=ix("nombre"), iS=ix("sku"), iC=ix("categoria"), iCo=ix("costo"), iP=ix("precio"), iPr=ix("proveedor"), iI=ix("imagen");
+      if(iN<0){ alert("El CSV debe tener una columna 'Nombre'."); ev.target.value=""; return; }
+      const nuevos=rows.slice(1).filter(r=>r[iN]&&r[iN].trim()).map(r=>({
+        nombre:r[iN].trim(), sku:iS>=0?(r[iS]||"").trim():"", categoria:iC>=0?(r[iC]||"").trim():"",
+        costo:iCo>=0?parseNum(r[iCo]):0, precio:iP>=0?parseNum(r[iP]):0,
+        proveedor:iPr>=0?(r[iPr]||"").trim():"", imagen:iI>=0?(r[iI]||"").trim():"" }));
+      if(!nuevos.length){ alert("No se encontraron filas."); ev.target.value=""; return; }
+      // inserta en lotes de 200
+      for(let i=0;i<nuevos.length;i+=200){
+        const lote=nuevos.slice(i,i+200).map(p=>({...p, empresa_id:empId()}));
+        await rest("productos",{method:"POST",headers:{...H(),Prefer:"return=minimal"},body:JSON.stringify(lote)});
+      }
+      CAT=await tSel("productos","select=*&deleted=eq.false&order=nombre"); renderProductos(); refrescarCatUI();
+      alert("Importados "+nuevos.length+" productos (agregados, sin borrar los existentes).");
+    }catch(e){ alert("Error importando CSV: "+e.message); }
+    ev.target.value="";
+  };
+  rd.readAsText(f);
+}
+/* Parser CSV mínimo con comillas */
+function parseCSV(text){
+  const rows=[]; let row=[], cur="", q=false;
+  text=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"') q=true; else if(c===",") { row.push(cur); cur=""; } else if(c==="\n"){ row.push(cur); rows.push(row); row=[]; cur=""; } else cur+=c; }
+  }
+  if(cur.length||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.length && r.some(x=>x!==""));
+}
 
 /* ===== utilidades ===== */
 function kpi(v,l){ return `<div class="box"><b>${v}</b><span>${l}</span></div>`; }
