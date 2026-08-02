@@ -1,0 +1,10 @@
+# Configuración para publicar esta carpeta como sitio ESTÁTICO en Cloudflare
+# (Workers con Static Assets). Cloudflare sirve index.html en la raíz.
+# Se usa cuando conectas el repo por GitHub y pones como "Root directory":
+#   crm-multiempresa/app/deploy
+name = "crm-multiempresa"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "."
+not_found_handling = "single-page-application"
