@@ -5,6 +5,12 @@
 JUMPSELLER_LOGIN=tu-login-de-api
 JUMPSELLER_AUTHTOKEN=tu-authtoken-de-api
 
+# ── Supabase (base compartida con el Cotizador / crm-multiempresa) ──
+# Mismo proyecto Supabase que el Cotizador. En el Cotizador estas claves se
+# llaman SUPA_URL / SUPA_KEY (Project Settings -> API).
+SUPABASE_URL=
+SUPABASE_KEY=
+
 # ── Meta / redes (Etapa B) ──
 # Ver la guía en docs/SETUP-REDES.md para obtener cada valor.
 IG_USER_ID=
