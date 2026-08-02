@@ -13,10 +13,11 @@ levanta para este repositorio. Resumen de cada uno y qué necesita para funciona
 
 ## Notas
 
-- **`postgres`** requiere el binario `postgres-mcp`, que se instala con
-  `pipx install --python /usr/bin/python3.12 postgres-mcp` (necesita Python ≥3.12).
-  La conexión se pasa por la variable de entorno `DATABASE_URI`, nunca escrita en
-  el repositorio.
+- **`postgres`** requiere el binario `postgres-mcp` (necesita Python ≥3.12). En
+  sesiones de Claude Code se instala automáticamente mediante el hook
+  [`.claude/hooks/session-start.sh`](../.claude/hooks/session-start.sh); a mano es
+  `pipx install --python /usr/bin/python3.12 postgres-mcp`. La conexión se pasa por
+  la variable de entorno `DATABASE_URI`, nunca escrita en el repositorio.
 - **`playwright`** usa el Chromium ya presente en el entorno; no descarga uno nuevo.
 - **`cloudflare`** abre un flujo OAuth en el navegador la primera vez. En sesiones
   no interactivas (cron/headless) puede no estar disponible hasta autorizarlo una
