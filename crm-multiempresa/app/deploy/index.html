@@ -287,6 +287,64 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
+    <!-- INVENTARIO -->
+    <section id="s-inventario" class="section">
+      <div class="card">
+        <h2>📦 Inventario</h2>
+        <div class="searchbar">
+          <input id="inv-q" placeholder="🔍 Buscar producto, categoría o proveedor" oninput="renderInventario()">
+          <span class="mini">Umbral bajo</span><input type="number" id="inv-umbral" value="5" style="max-width:80px" onchange="renderInventario()">
+          <button class="btn-sec" onclick="exportInventarioCSV()">Exportar CSV</button>
+          <span class="mini" id="inv-count"></span>
+        </div>
+        <p class="mini">Edita el <b>stock</b> y el <b>mínimo</b> por producto (se guarda al instante). Estado: sin stock / bajo / ok.</p>
+        <div style="overflow:auto;max-height:64vh">
+          <table><thead><tr><th>Producto</th><th>Categoría</th><th>Proveedor</th><th>Stock</th><th>Mínimo</th><th>Estado</th></tr></thead>
+          <tbody id="inv-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESÚMENES -->
+    <section id="s-resumenes" class="section">
+      <div class="card">
+        <h2>📈 Resúmenes</h2>
+        <div id="res-tabs" class="searchbar">
+          <button class="btn-sec active" data-t="vendedor" onclick="resTab('vendedor')">Por vendedor</button>
+          <button class="btn-sec" data-t="proveedor" onclick="resTab('proveedor')">Por proveedor</button>
+          <button class="btn-sec" data-t="mensual" onclick="resTab('mensual')">Mensual</button>
+          <span class="mini">Desde</span><input type="date" id="res-desde" onchange="pintarResumen()">
+          <span class="mini">Hasta</span><input type="date" id="res-hasta" onchange="pintarResumen()">
+        </div>
+        <div style="overflow:auto;max-height:64vh">
+          <table><thead id="res-head"></thead><tbody id="res-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- USUARIOS -->
+    <section id="s-usuarios" class="section">
+      <div class="card">
+        <h2>👥 Usuarios y accesos <span class="mini">(de esta empresa)</span></h2>
+        <p class="mini">El <b>Administrador</b> ve costos y todo; el <b>Vendedor</b> solo cotiza. Se autentican con Supabase Auth. (Si el proyecto exige confirmar correo, el usuario deberá confirmarlo antes de entrar.)</p>
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:1"><label>Crear usuario — correo</label><input id="us-email" placeholder="persona@empresa.com"></div>
+          <div><label>Contraseña</label><input id="us-pass" type="text" placeholder="mín. 6"></div>
+          <div><label>Rol</label><select id="us-rol"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
+          <div><button class="btn-dark" onclick="usCrear()">+ Crear</button></div>
+        </div>
+        <div class="mini" id="us-msg" style="margin-top:4px"></div>
+        <div class="row" style="align-items:flex-end;margin-top:8px">
+          <div style="flex:1"><label>…o agregar un usuario ya registrado (por correo)</label><input id="us-email2" placeholder="correo existente"></div>
+          <div><label>Rol</label><select id="us-rol2"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
+          <div><button class="btn-sec" onclick="usAgregarExistente()">Agregar</button></div>
+        </div>
+        <div style="overflow:auto;max-height:52vh;margin-top:12px">
+          <table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Acceso</th></tr></thead><tbody id="us-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
     <!-- CONFIGURACIÓN -->
     <section id="s-config" class="section">
       <div class="card">
@@ -591,6 +649,9 @@ const MODULES = [
   {id:"proveedores", label:"🏭 Proveedores", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"ordenes", label:"📄 Órdenes de compra", roles:["super_admin","admin_empresa","supervisor"]},
   {id:"notas", label:"🧾 Notas de pedido", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"inventario", label:"📦 Inventario", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"resumenes", label:"📈 Resúmenes", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"usuarios", label:"👥 Usuarios", roles:["super_admin","admin_empresa"]},
   {id:"config", label:"⚙️ Configuración", roles:["super_admin","admin_empresa"]},
   // SLOT: añade aquí más módulos de la v30 con sus roles.
 ];
@@ -611,6 +672,9 @@ function go(id){
   if(id==="proveedores")  renderProveedores();
   if(id==="ordenes")      renderOrdenes();
   if(id==="notas")        renderNotas();
+  if(id==="inventario")   renderInventario();
+  if(id==="resumenes")    renderResumenes();
+  if(id==="usuarios")     renderUsuarios();
   if(id==="config")       renderConfig();
   if(id==="holding")      { /* ya renderizado al entrar */ }
 }
@@ -1311,6 +1375,118 @@ async function pdfDocNota(n){
   doc.autoTable({ startY:y+4, head:[["Producto","Cant.","Costo neto","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
   doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Costo neto",money(n.costo_neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(n.total)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
   pdfFooter(doc,H); doc.save((n.numero||"NP")+".pdf");
+}
+
+/* ============================================================================
+   INVENTARIO (stock por producto)
+============================================================================ */
+let INV=[];
+function descargaCSV(rows,nombre){ const csv=rows.map(r=>r.map(c=>{ c=String(c==null?"":c); return /[",\n]/.test(c)?('"'+c.replace(/"/g,'""')+'"'):c; }).join(",")).join("\n");
+  const b=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=nombre; a.click(); }
+async function renderInventario(){
+  const term=($("inv-q")?$("inv-q").value:"").toLowerCase(); const umbral=Number($("inv-umbral")?$("inv-umbral").value:5)||5;
+  try{ INV=await tSel("productos","select=id,nombre,categoria,proveedor,stock,stock_min&deleted=eq.false&order=nombre"); }
+  catch(e){ $("inv-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const list=INV.filter(p=>!term || (p.nombre||"").toLowerCase().includes(term) || (p.categoria||"").toLowerCase().includes(term) || (p.proveedor||"").toLowerCase().includes(term));
+  $("inv-body").innerHTML=list.map(p=>{ const st=Number(p.stock)||0; const min=Number(p.stock_min)||umbral;
+    const estado = st<=0 ? '<span class="est r">sin stock</span>' : (st<=min ? '<span class="est p">bajo</span>' : '<span class="est a">ok</span>');
+    return `<tr><td>${esc(p.nombre)}</td><td>${esc(p.categoria||"")}</td><td>${esc(p.proveedor||"")}</td>
+      <td style="width:80px"><input type="number" value="${st}" onchange="invSet('${p.id}','stock',this.value)"></td>
+      <td style="width:80px"><input type="number" value="${Number(p.stock_min)||0}" onchange="invSet('${p.id}','stock_min',this.value)"></td>
+      <td>${estado}</td></tr>`; }).join("") || `<tr><td colspan="6" class="muted">Sin productos.</td></tr>`;
+  if($("inv-count")) $("inv-count").textContent=list.length+" productos";
+}
+async function invSet(id,field,v){ const patch={}; patch[field]=parseInt(v)||0; try{ await tUpdate("productos", id, patch);
+  const p=INV.find(x=>x.id===id); if(p) p[field]=patch[field]; renderInventario(); }catch(e){ alert(e.message); } }
+function exportInventarioCSV(){ descargaCSV([["Producto","Categoria","Proveedor","Stock","StockMin"]].concat(INV.map(p=>[p.nombre,p.categoria||"",p.proveedor||"",p.stock||0,p.stock_min||0])),"inventario.csv"); }
+
+/* ============================================================================
+   RESÚMENES (por vendedor / proveedor / mensual)
+============================================================================ */
+let RES_COTS=[], RES_TAB="vendedor";
+function cotizTotal(x){ if(x.data && x.data.total!=null) return Number(x.data.total)||0; try{ return quoteTotals({items:x.items||[], pct:Number(x.pct)||0, despacho:Number(x.despacho)||0, despMode:(x.data&&x.data.despMode)||"pct"}).total; }catch(_){ return 0; } }
+function cotizNeto(x){ if(x.data && x.data.neto!=null) return Number(x.data.neto)||0; try{ return quoteTotals({items:x.items||[], pct:Number(x.pct)||0, despacho:Number(x.despacho)||0, despMode:(x.data&&x.data.despMode)||"pct"}).neto; }catch(_){ return 0; } }
+function cotizCosto(x){ return (x.items||[]).reduce((a,it)=>a+(Number(it.costo)||0)*(Number(it.cantidad)||1),0); }
+async function renderResumenes(){
+  try{ RES_COTS=await tSel("cotizaciones","select=*&order=fecha.desc"); }catch(e){ $("res-body").innerHTML=`<tr><td class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  pintarResumen();
+}
+function resTab(t){ RES_TAB=t; document.querySelectorAll("#res-tabs button").forEach(b=>b.classList.toggle("active", b.dataset.t===t)); pintarResumen(); }
+function pintarResumen(){
+  const d1=$("res-desde")?$("res-desde").value:"", d2=$("res-hasta")?$("res-hasta").value:"";
+  const cots=(RES_COTS||[]).filter(x=>{ const f=x.fecha||((x.created_at||"").slice(0,10)); return (!d1||f>=d1)&&(!d2||f<=d2); });
+  if(RES_TAB==="proveedor") resProveedor(cots); else if(RES_TAB==="mensual") resMensual(cots); else resVendedor(cots);
+}
+function resVendedor(cots){
+  const g={}; cots.forEach(x=>{ const k=x.vendedor_name||"—"; g[k]=g[k]||{cotiz:0,monto:0,aprob:0,vendido:0};
+    g[k].cotiz++; g[k].monto+=cotizTotal(x); if(x.estado==="aprobada"){ g[k].aprob++; g[k].vendido+=cotizTotal(x); } });
+  $("res-head").innerHTML="<tr><th>Vendedor</th><th class='right'>Cotiz.</th><th class='right'>Monto cotizado</th><th class='right'>Aprobadas</th><th class='right'>Monto vendido</th><th class='right'>% conv.</th></tr>";
+  $("res-body").innerHTML=Object.entries(g).sort((a,b)=>b[1].monto-a[1].monto).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="right">${v.cotiz}</td><td class="right">${money(v.monto)}</td><td class="right">${v.aprob}</td><td class="right">${money(v.vendido)}</td><td class="right">${v.cotiz?Math.round(v.aprob/v.cotiz*100):0}%</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin datos en el rango.</td></tr>`;
+}
+function resProveedor(cots){
+  const g={};
+  cots.forEach(x=>{ const q={items:x.items||[], pct:Number(x.pct)||0, despacho:Number(x.despacho)||0, despMode:(x.data&&x.data.despMode)||"pct"};
+    (x.items||[]).forEach(it=>{ const k=it.proveedor||"—"; g[k]=g[k]||{set:new Set(),items:0,costo:0,venta:0};
+      g[k].set.add(x.id); g[k].items+=(Number(it.cantidad)||1); g[k].costo+=(Number(it.costo)||0)*(Number(it.cantidad)||1);
+      try{ g[k].venta+=qUnit(q,it)*(Number(it.cantidad)||1); }catch(_){ } }); });
+  $("res-head").innerHTML="<tr><th>Proveedor</th><th class='right'>Cotiz.</th><th class='right'>Ítems</th><th class='right'>Costo</th><th class='right'>Venta</th><th class='right'>Ganancia</th></tr>";
+  $("res-body").innerHTML=Object.entries(g).sort((a,b)=>(b[1].venta-b[1].costo)-(a[1].venta-a[1].costo)).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="right">${v.set.size}</td><td class="right">${v.items}</td><td class="right">${money(v.costo)}</td><td class="right">${money(v.venta)}</td><td class="right">${money(v.venta-v.costo)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin datos.</td></tr>`;
+}
+function resMensual(cots){
+  const g={};
+  cots.forEach(x=>{ const f=(x.fecha||((x.created_at||"").slice(0,10))||""); const mes=f.slice(0,7)||"—"; g[mes]=g[mes]||{cotiz:0,costo:0,desp:0,venta:0};
+    g[mes].cotiz++; g[mes].costo+=cotizCosto(x); g[mes].desp+=Number(x.despacho)||0; g[mes].venta+=cotizNeto(x); });
+  $("res-head").innerHTML="<tr><th>Mes</th><th class='right'>Cotiz.</th><th class='right'>Costo</th><th class='right'>Despacho</th><th class='right'>Venta (neto)</th><th class='right'>Ganancia</th></tr>";
+  $("res-body").innerHTML=Object.entries(g).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="right">${v.cotiz}</td><td class="right">${money(v.costo)}</td><td class="right">${money(v.desp)}</td><td class="right">${money(v.venta)}</td><td class="right">${money(v.venta-v.costo-v.desp)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin datos.</td></tr>`;
+}
+
+/* ============================================================================
+   USUARIOS Y MEMBRESÍAS (super_admin / admin_empresa)
+============================================================================ */
+const ROLES_ASIG=["admin_empresa","supervisor","vendedor","solo_lectura"];
+function puedeUsuarios(){ return ["super_admin","admin_empresa"].includes(MT.rol); }
+async function renderUsuarios(){
+  if(!puedeUsuarios()){ if($("us-body")) $("us-body").innerHTML='<tr><td colspan="4" class="muted">Sin permiso.</td></tr>'; return; }
+  let list; try{ list=await rest("membresias?empresa_id=eq."+empId()+"&select=id,rol,activo,usuario_id,perfiles(nombre,email)&order=created_at"); }
+  catch(e){ $("us-body").innerHTML=`<tr><td colspan="4" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  $("us-body").innerHTML=(list||[]).map(m=>{ const p=m.perfiles||{};
+    return `<tr>
+      <td>${esc(p.nombre||"(perfil no visible)")}</td>
+      <td>${esc(p.email||m.usuario_id)}</td>
+      <td><select onchange="usSetRol('${m.id}',this.value)" style="font-size:12px">${ROLES_ASIG.map(r=>`<option value="${r}"${m.rol===r?" selected":""}>${etiquetaRol(r)}</option>`).join("")}</select></td>
+      <td><label class="mini" style="margin-right:8px"><input type="checkbox" ${m.activo?"checked":""} onchange="usActivo('${m.id}',this.checked)"> activo</label>
+          <button class="btn-red" onclick="usQuitar('${m.id}')">Quitar</button></td></tr>`; }).join("")
+    || `<tr><td colspan="4" class="muted">Aún no hay usuarios asignados a esta empresa.</td></tr>`;
+}
+async function usSetRol(id,r){ try{ await tUpdate("membresias", id, {rol:r}); }catch(e){ alert(e.message); } }
+async function usActivo(id,v){ try{ await tUpdate("membresias", id, {activo:v}); }catch(e){ alert(e.message); } }
+async function usQuitar(id){ if(!confirm("¿Quitar el acceso de este usuario a la empresa?")) return; try{ await tDelete("membresias", id); renderUsuarios(); }catch(e){ alert(e.message); } }
+async function usAgregarExistente(){
+  const email=($("us-email2").value||"").trim().toLowerCase(); const rol=$("us-rol2").value;
+  if(!email){ alert("Ingresa el correo."); return; }
+  try{
+    const p=await rest("perfiles?email=eq."+encodeURIComponent(email)+"&select=id,nombre");
+    if(!p || !p.length){ alert("No encontré un usuario con ese correo. Usa «Crear usuario», o pídele que se registre primero."); return; }
+    await tInsert("membresias", {usuario_id:p[0].id, rol, activo:true});
+    $("us-email2").value=""; renderUsuarios(); alert("Usuario agregado a la empresa.");
+  }catch(e){ alert("No se pudo agregar (¿ya estaba asignado?): "+e.message); }
+}
+async function usCrear(){
+  const email=($("us-email").value||"").trim().toLowerCase(); const pass=$("us-pass").value; const rol=$("us-rol").value;
+  if(!email || !pass){ alert("Correo y contraseña son obligatorios."); return; }
+  if(pass.length<6){ alert("La contraseña debe tener al menos 6 caracteres."); return; }
+  $("us-msg").style.color="#64748b"; $("us-msg").textContent="Creando…";
+  try{
+    const r=await fetch(SUPA_URL+"/auth/v1/signup", {method:"POST", headers:{apikey:SUPA_ANON,"Content-Type":"application/json"}, body:JSON.stringify({email, password:pass})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.msg||j.error_description||j.error||"No se pudo crear el usuario.");
+    const uid=(j.user&&j.user.id)||j.id;
+    if(!uid) throw new Error("Usuario creado; si el proyecto exige confirmar correo, confírmalo y luego agrégalo por correo.");
+    await new Promise(res=>setTimeout(res,700));
+    await tInsert("membresias", {usuario_id:uid, rol, activo:true});
+    $("us-email").value=""; $("us-pass").value=""; $("us-msg").style.color="var(--verde,#16a34a)"; $("us-msg").textContent="✅ Usuario creado y asignado a "+((MT.empresa&&MT.empresa.nombre)||"la empresa")+".";
+    renderUsuarios();
+  }catch(e){ $("us-msg").style.color="var(--rojo,#dc2626)"; $("us-msg").textContent="Error: "+((e&&e.message)||e); }
 }
 </script>
 </body>
