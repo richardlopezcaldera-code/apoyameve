@@ -21,6 +21,8 @@ import { caption } from "../lib/caption";
 import { publishInstagram, publishFacebook, publishTikTok, type PublishResult } from "../lib/publish";
 import { publishViaMetricool } from "../lib/metricool";
 import { FALLBACK_PRODUCTS } from "../lib/fallback-products";
+import { hasSupabase } from "../lib/supabase";
+import { listProductos, getProducto, toProduct } from "../lib/kamiana";
 
 type Bindings = {
   JUMPSELLER_LOGIN?: string;
@@ -39,6 +41,9 @@ type Bindings = {
   PUBLIC_BASE_URL?: string;
   RUN_TOKEN?: string;
   ADS_KV?: KVNamespace;
+  // Base compartida con el Cotizador (crm-multiempresa) — mismo proyecto Supabase.
+  SUPABASE_URL?: string;
+  SUPABASE_KEY?: string;
 };
 
 type QueueEntry = {
@@ -137,6 +142,40 @@ app.get("/og", async (c) => {
     product = fallbackProduct(id);
   }
   return pngFor(product, format);
+});
+
+// ── Catálogo compartido (Supabase, tablas kam_* del Cotizador) ──
+// Estado de la conexión y lista de productos de la base compartida.
+app.get("/kamiana/productos", async (c) => {
+  if (!hasSupabase(c.env)) {
+    return c.json(
+      {
+        configured: false,
+        message:
+          "Faltan SUPABASE_URL / SUPABASE_KEY. Configuralos como secrets del Worker.",
+      },
+      200,
+    );
+  }
+  try {
+    const limit = Math.min(Number(c.req.query("limit") ?? 100) || 100, 500);
+    const productos = await listProductos(c.env, limit);
+    return c.json({ configured: true, count: productos.length, productos });
+  } catch (e) {
+    return c.json({ configured: true, error: String(e) }, 502);
+  }
+});
+
+// Aviso (imagen) de un producto del catálogo compartido:
+// /kamiana/og?id=<id-texto>&format=post|story
+app.get("/kamiana/og", async (c) => {
+  const id = c.req.query("id");
+  const format = (c.req.query("format") === "story" ? "story" : "post") as Format;
+  if (!id) return c.text("Falta ?id=<id del producto>.", 400);
+  if (!hasSupabase(c.env)) return c.text("Base compartida no configurada.", 503);
+  const k = await getProducto(c.env, id);
+  if (!k) return c.text("Producto no encontrado en el catálogo compartido.", 404);
+  return pngFor(toProduct(k), format);
 });
 
 // Proxy de la foto del producto, same-origin, para que el canvas del Reel no
