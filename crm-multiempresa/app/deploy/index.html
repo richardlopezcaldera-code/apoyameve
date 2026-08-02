@@ -331,7 +331,62 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
+    <!-- ÓRDENES DE COMPRA -->
+    <section id="s-ordenes" class="section">
+      <div class="card">
+        <h2>📄 Órdenes de compra</h2>
+        <p class="mini">Se crean al <b>aprobar</b> una cotización. Aquí puedes editar precios de venta y generar la Nota de Pedido al proveedor.</p>
+        <div class="searchbar"><input id="oc-q" placeholder="🔍 Buscar N° OC o cliente" oninput="renderOrdenes()"></div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>N° OC</th><th>Cotización</th><th>Cliente</th><th class="right">Total venta</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="oc-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- NOTAS DE PEDIDO -->
+    <section id="s-notas" class="section">
+      <div class="card">
+        <h2>🧾 Notas de pedido</h2>
+        <p class="mini">Pedido al proveedor (costos netos + IVA). Se generan desde una Orden de compra.</p>
+        <div class="searchbar">
+          <input id="np-q" placeholder="🔍 Buscar N° o proveedor" oninput="renderNotas()">
+          <select id="np-estado" onchange="renderNotas()"><option value="">Todos los estados</option><option value="pendiente">pendiente</option><option value="enviada">enviada</option><option value="recibida">recibida</option></select>
+        </div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>N°</th><th>Fecha</th><th>Proveedor</th><th class="right">Costo neto</th><th class="right">Total c/IVA</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="np-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- Diálogo editar Orden de Compra -->
+  <dialog id="dlg-oc" style="border:none;border-radius:14px;padding:0;width:min(660px,95vw)">
+    <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700">Editar Orden de Compra</div>
+    <div style="padding:18px">
+      <div class="row"><div><label>N° OC</label><input id="oc-e-num"></div><div><label>Cliente</label><input id="oc-e-cli" disabled></div></div>
+      <div style="overflow:auto;max-height:48vh;margin-top:10px">
+        <table><thead><tr><th>Producto</th><th class="right">Cant.</th><th>Precio venta</th><th class="right">Total</th></tr></thead><tbody id="oc-e-body"></tbody></table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+        <b>Total: <span id="oc-e-total">$0</span></b>
+        <div style="display:flex;gap:8px"><button class="btn-dark" onclick="guardarOC()">Guardar</button><button class="btn-gray" onclick="$('dlg-oc').close()">Cerrar</button></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Diálogo generar Nota de Pedido -->
+  <dialog id="dlg-nota" style="border:none;border-radius:14px;padding:0;width:min(480px,94vw)">
+    <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700">Generar Nota de Pedido</div>
+    <div style="padding:18px">
+      <label>Proveedor</label>
+      <select id="nota-prov" style="width:100%"></select>
+      <p class="mini">Se incluyen los productos de la OC de ese proveedor (o todos si eliges «Todos»). Usa el costo neto + IVA.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn-dark" onclick="generarNotaPedido()">Generar</button><button class="btn-gray" onclick="$('dlg-nota').close()">Cancelar</button></div>
+    </div>
+  </dialog>
 
   <!-- Diálogo alta/edición de proveedor -->
   <dialog id="dlg-pv" style="border:none;border-radius:14px;padding:0;width:min(520px,94vw)">
@@ -530,6 +585,8 @@ const MODULES = [
   {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"productos", label:"📦 Productos", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"proveedores", label:"🏭 Proveedores", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"ordenes", label:"📄 Órdenes de compra", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"notas", label:"🧾 Notas de pedido", roles:["super_admin","admin_empresa","supervisor"]},
   {id:"config", label:"⚙️ Configuración", roles:["super_admin","admin_empresa"]},
   // SLOT: añade aquí más módulos de la v30 con sus roles.
 ];
@@ -548,6 +605,8 @@ function go(id){
   if(id==="cotizaciones") { if(!CURR) nuevaCotiz(); else showBuilder(); }
   if(id==="productos")    renderProductos();
   if(id==="proveedores")  renderProveedores();
+  if(id==="ordenes")      renderOrdenes();
+  if(id==="notas")        renderNotas();
   if(id==="config")       renderConfig();
   if(id==="holding")      { /* ya renderizado al entrar */ }
 }
@@ -798,8 +857,16 @@ async function editQuote(id){
 }
 async function aprobar(id){
   if(!puedeAprobar()) return;
-  const oc=prompt("N° de Orden de Compra (manual):"); if(oc===null||!oc.trim()) return;
-  try{ await tUpdate("cotizaciones", id, { estado:"aprobada", oc_numero:oc.trim(), aprobada_fecha:hoy() }); renderQuotes(); }
+  const q=await fetchQuote(id); if(!q) return;
+  let oc=prompt("N° de Orden de Compra (deja vacío para autonumerar):", q.oc_numero||"");
+  if(oc===null) return;
+  try{
+    const num=(oc.trim()) || (await siguienteNumero("orden_compra","OC"));
+    await tUpdate("cotizaciones", id, { estado:"aprobada", oc_numero:num, aprobada_fecha:hoy() });
+    await crearOCdesdeCotiz(q, num);
+    renderQuotes();
+    alert("✅ Cotización aprobada y Orden de Compra "+num+" creada. Revisa el módulo «Órdenes de compra».");
+  }
   catch(e){ alert("No se pudo aprobar: "+e.message); }
 }
 async function rechazar(id){
@@ -1082,6 +1149,123 @@ async function guardarConfig(){
     const opt = $("emp-select") && $("emp-select").selectedOptions[0]; if(opt) opt.textContent = patch.nombre;
     if($("cf-msg")){ $("cf-msg").style.color="var(--verde,#16a34a)"; $("cf-msg").textContent="✅ Configuración guardada."; }
   }catch(e){ if($("cf-msg")){ $("cf-msg").style.color="var(--rojo,#dc2626)"; $("cf-msg").textContent="Error al guardar: "+((e&&e.message)||e); } }
+}
+
+/* ============================================================================
+   ÓRDENES DE COMPRA  (nacen al aprobar una cotización)
+============================================================================ */
+let OC_EDIT=null, NOTA_SRC=null;
+async function crearOCdesdeCotiz(q, num){
+  const qq={items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct"};
+  const t=quoteTotals(qq);
+  const items=(q.items||[]).map(it=>{ const cant=Number(it.cantidad)||1, pv=qUnit(qq,it);
+    return {nombre:it.nombre, sku:it.sku||"", proveedor:it.proveedor||"", cantidad:cant, costo:Number(it.costo)||0, precio_venta:pv, total:pv*cant, detalle:it.detalle||""}; });
+  const cli=CLIENTES.find(c=>c.id===q.cliente_id);
+  const row={ numero:num, cotizacion_id:q.id, cliente_id:q.cliente_id||null, cliente_nombre:(cli&&cli.nombre)||"",
+              items, total:t.total, estado:"pendiente", data:{neto:t.neto, iva:t.iva, total:t.total, cotiz_numero:q.numero||""} };
+  const ex=await tSel("ordenes_compra","cotizacion_id=eq."+q.id+"&select=id");
+  if(ex && ex[0]) await tUpdate("ordenes_compra", ex[0].id, row); else await tInsert("ordenes_compra", row);
+}
+async function renderOrdenes(){
+  const term=($("oc-q")?$("oc-q").value:"").toLowerCase();
+  let list; try{ list=await tSel("ordenes_compra","select=*&order=created_at.desc"); }catch(e){ $("oc-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  list=list.filter(o=>!term || (o.numero||"").toLowerCase().includes(term) || (o.cliente_nombre||"").toLowerCase().includes(term));
+  $("oc-body").innerHTML=list.map(o=>`<tr>
+      <td>${esc(o.numero||"")}</td><td>${esc((o.data&&o.data.cotiz_numero)||"")}</td><td>${esc(o.cliente_nombre||"—")}</td>
+      <td class="right">${money(o.total)}</td><td>${badge(o.estado)}</td>
+      <td><button class="btn-sec" onclick="editOC('${o.id}')">Editar</button>
+          <button class="btn-sec" onclick="abrirGenerarNota('${o.id}')">Nota pedido</button>
+          <button class="btn-sec" onclick="pdfOC('${o.id}')">PDF</button>
+          <button class="btn-red" onclick="delOC('${o.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">Aún no hay órdenes de compra. Se crean al aprobar una cotización.</td></tr>`;
+}
+async function fetchOC(id){ const r=await tSel("ordenes_compra","id=eq."+id+"&select=*"); return r[0]; }
+async function editOC(id){
+  const o=await fetchOC(id); if(!o) return; OC_EDIT=o;
+  $("oc-e-num").value=o.numero||""; $("oc-e-cli").value=o.cliente_nombre||"";
+  $("oc-e-body").innerHTML=(o.items||[]).map((it,i)=>`<tr>
+     <td>${esc(it.nombre)}</td><td class="right" style="width:60px">${it.cantidad}</td>
+     <td style="width:130px"><input type="text" inputmode="decimal" value="${Math.round(it.precio_venta||0)}" onchange="ocSetPrecio(${i},this.value)"></td>
+     <td class="right" id="oc-lt-${i}">${money((it.precio_venta||0)*it.cantidad)}</td></tr>`).join("");
+  ocRecalc(); $("dlg-oc").showModal();
+}
+function ocSetPrecio(i,v){ if(OC_EDIT&&OC_EDIT.items[i]){ OC_EDIT.items[i].precio_venta=parseNum(v); OC_EDIT.items[i].total=OC_EDIT.items[i].precio_venta*OC_EDIT.items[i].cantidad; $("oc-lt-"+i).textContent=money(OC_EDIT.items[i].total); ocRecalc(); } }
+function ocRecalc(){ if(!OC_EDIT) return; const neto=(OC_EDIT.items||[]).reduce((a,it)=>a+(it.total||0),0), iva=Math.round(neto*ivaPct()/100); OC_EDIT._neto=neto; OC_EDIT._iva=iva; OC_EDIT._total=neto+iva; $("oc-e-total").textContent=money(neto+iva); }
+async function guardarOC(){
+  if(!OC_EDIT) return; const num=$("oc-e-num").value.trim()||OC_EDIT.numero;
+  try{ await tUpdate("ordenes_compra", OC_EDIT.id, { numero:num, items:OC_EDIT.items, total:OC_EDIT._total, data:Object.assign({}, OC_EDIT.data, {neto:OC_EDIT._neto, iva:OC_EDIT._iva, total:OC_EDIT._total}) });
+    $("dlg-oc").close(); renderOrdenes(); }
+  catch(e){ alert("No se pudo guardar la OC: "+e.message); }
+}
+async function delOC(id){ if(!confirm("¿Eliminar esta orden de compra?")) return; try{ await tDelete("ordenes_compra", id); renderOrdenes(); }catch(e){ alert(e.message); } }
+function pdfOC(id){ fetchOC(id).then(o=>{ if(o) pdfDocOC(o); }); }
+function pdfDocOC(o){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa",14,18);
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(80); doc.text([H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono?("Tel: "+H.telefono):""].filter(Boolean),14,24);
+  doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.setTextColor(22,50,79); doc.text("ORDEN DE COMPRA",196,16,{align:'right'});
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80); doc.text(["N°: "+(o.numero||""),"Fecha: "+hoy()],196,23,{align:'right'});
+  doc.setFontSize(9); doc.setTextColor(30); doc.text("Cliente: "+(o.cliente_nombre||""),14,42);
+  const body=(o.items||[]).map(it=>[it.nombre, it.cantidad, money(it.precio_venta), money((it.precio_venta||0)*it.cantidad)]);
+  const neto=(o.items||[]).reduce((a,it)=>a+(it.precio_venta||0)*it.cantidad,0), iva=Math.round(neto*ivaPct()/100);
+  doc.autoTable({ startY:48, head:[["Producto","Cant.","Precio venta","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Subtotal",money(neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(neto+iva)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
+  doc.save((o.numero||"OC")+".pdf");
+}
+function abrirGenerarNota(ocId){
+  fetchOC(ocId).then(o=>{ if(!o) return; NOTA_SRC=o;
+    const setP=[...new Set((o.items||[]).map(it=>it.proveedor).filter(Boolean))];
+    $("nota-prov").innerHTML=['<option value="__all__">Todos los productos</option>'].concat(setP.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`)).join("");
+    $("dlg-nota").showModal();
+  });
+}
+async function generarNotaPedido(){
+  if(!NOTA_SRC) return; const sel=$("nota-prov").value;
+  const items=(NOTA_SRC.items||[]).filter(it=> sel==="__all__" || (it.proveedor||"")===sel)
+     .map(it=>({nombre:it.nombre, sku:it.sku||"", cantidad:it.cantidad, costo:Number(it.costo)||0, total:(Number(it.costo)||0)*it.cantidad}));
+  if(!items.length){ alert("No hay productos para ese proveedor en la OC."); return; }
+  const costo_neto=items.reduce((a,it)=>a+it.total,0), total=Math.round(costo_neto*(1+ivaPct()/100));
+  const provObj=PROV.find(p=>p.nombre===sel);
+  try{
+    const num=await siguienteNumero("nota_pedido","NP");
+    await tInsert("notas_pedido", { numero:num, proveedor_id:(provObj&&provObj.id)||null, proveedor_nombre:(sel==="__all__"?"(varios)":sel),
+       cotizacion_id:NOTA_SRC.cotizacion_id||null, oc_id:NOTA_SRC.id, items, costo_neto, total, estado:"pendiente", data:{} });
+    $("dlg-nota").close(); alert("🧾 Nota de pedido "+num+" creada."); go("notas");
+  }catch(e){ alert("No se pudo crear la nota: "+e.message); }
+}
+
+/* ============================================================================
+   NOTAS DE PEDIDO  (al proveedor, con costos + IVA)
+============================================================================ */
+async function renderNotas(){
+  const est=$("np-estado")?$("np-estado").value:""; const term=($("np-q")?$("np-q").value:"").toLowerCase();
+  let list; try{ list=await tSel("notas_pedido","select=*&order=created_at.desc"); }catch(e){ $("np-body").innerHTML=`<tr><td colspan="7" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  list=list.filter(n=>(!est||n.estado===est) && (!term || (n.numero||"").toLowerCase().includes(term) || (n.proveedor_nombre||"").toLowerCase().includes(term)));
+  $("np-body").innerHTML=list.map(n=>`<tr>
+     <td>${esc(n.numero||"")}</td><td>${esc((n.created_at||"").slice(0,10))}</td><td>${esc(n.proveedor_nombre||"—")}</td>
+     <td class="right">${money(n.costo_neto)}</td><td class="right">${money(n.total)}</td><td>${badge(n.estado)}</td>
+     <td><select onchange="notaEstado('${n.id}',this.value)" style="font-size:11px">
+        ${["pendiente","enviada","recibida"].map(s=>`<option value="${s}"${n.estado===s?" selected":""}>${s}</option>`).join("")}</select>
+        <button class="btn-sec" onclick="pdfNota('${n.id}')">PDF</button>
+        <button class="btn-red" onclick="delNota('${n.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">Aún no hay notas de pedido. Genérala desde una Orden de compra.</td></tr>`;
+}
+async function fetchNota(id){ const r=await tSel("notas_pedido","id=eq."+id+"&select=*"); return r[0]; }
+async function notaEstado(id,v){ try{ await tUpdate("notas_pedido", id, {estado:v}); renderNotas(); }catch(e){ alert(e.message); } }
+async function delNota(id){ if(!confirm("¿Eliminar esta nota de pedido?")) return; try{ await tDelete("notas_pedido", id); renderNotas(); }catch(e){ alert(e.message); } }
+function pdfNota(id){ fetchNota(id).then(n=>{ if(n) pdfDocNota(n); }); }
+function pdfDocNota(n){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa",14,18);
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(80); doc.text([H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono?("Tel: "+H.telefono):""].filter(Boolean),14,24);
+  doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.setTextColor(22,50,79); doc.text("NOTA DE PEDIDO",196,16,{align:'right'});
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80); doc.text(["N°: "+(n.numero||""),"Fecha: "+((n.created_at||hoy()).slice(0,10))],196,23,{align:'right'});
+  doc.setFontSize(9); doc.setTextColor(30); doc.text("Proveedor: "+(n.proveedor_nombre||""),14,42);
+  const body=(n.items||[]).map(it=>[it.nombre, it.cantidad, money(it.costo), money((it.costo||0)*it.cantidad)]);
+  const iva=Math.round((Number(n.costo_neto)||0)*ivaPct()/100);
+  doc.autoTable({ startY:48, head:[["Producto","Cant.","Costo neto","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Costo neto",money(n.costo_neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(n.total)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
+  doc.save((n.numero||"NP")+".pdf");
 }
 </script>
 </body>
