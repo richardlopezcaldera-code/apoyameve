@@ -208,6 +208,9 @@ h2{color:var(--nav);margin-top:0;}
             <div><label>% de venta <span class="mini">no se muestra al cliente</span></label><input type="number" id="b-pct" min="0" oninput="renderItems()"></div>
           </div>
           <div class="row" style="margin-top:6px">
+            <div style="flex:1"><label>Firma en el PDF</label><select id="b-firma"></select></div>
+          </div>
+          <div class="row" style="margin-top:6px">
             <div style="flex:0;min-width:170px"><label>Despacho (neto)</label>
               <input type="text" inputmode="decimal" id="b-despacho" value="0" oninput="recalc()">
               <select id="b-despmodo" onchange="renderItems()" style="margin-top:6px">
@@ -566,6 +569,7 @@ async function cargarDatosEmpresa(){
   // categorías del catálogo para el filtro
   const cats = [...new Set(CAT.map(p=>p.categoria).filter(Boolean))].sort();
   const sel = $("b-prcat"); if(sel){ sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); }
+  fillFirmas();
 }
 
 function etiquetaRol(r){ return ({super_admin:"Super Admin", admin_empresa:"Administrador", supervisor:"Supervisor", vendedor:"Vendedor", solo_lectura:"Solo lectura"})[r] || r || "—"; }
@@ -703,7 +707,7 @@ function nuevaCotiz(){
   $("b-num").value=""; $("b-pct").value=CURR.pct; $("b-despacho").value=0; $("b-despmodo").value="pct";
   ["b-cli-nombre","b-cli-rut","b-cli-correo","b-cli-tel","b-cli-dir","b-cli-coment","b-cli-search","b-prq"].forEach(id=>{ if($(id)) $(id).value=""; });
   $("cli-flag").textContent=""; $("cli-results").classList.add("hidden");
-  renderCat(); renderItems(); showBuilder(); $("builder-status").textContent="Nueva cotización";
+  fillFirmas(); renderCat(); renderItems(); showBuilder(); $("builder-status").textContent="Nueva cotización";
 }
 
 /* ----- Catálogo ----- */
@@ -719,7 +723,7 @@ function renderCat(){
 function addCatItem(pid){
   const p = CAT.find(x=>x.id===pid); if(!p) return;
   CURR.items.push({ productoId:p.id, nombre:p.nombre, sku:p.sku||"", proveedor:p.proveedor||"",
-                    costo:Number(p.costo)||0, precioFijo:0, cantidad:1, detalle:"" });
+                    costo:Number(p.costo)||0, precioFijo:0, cantidad:1, detalle:"", imagen:p.imagen||"" });
   renderItems();
 }
 function addFueraItem(){
@@ -811,7 +815,7 @@ async function builderSave(){
     const row={ numero:CURR.numero, fecha:CURR.fecha, cliente_id:CURR.clienteId||null,
       vendedor_id:MT.user.id, vendedor_name:(MT.perfil&&MT.perfil.nombre)||MT.user.email,
       items:CURR.items, despacho:CURR.despacho, pct:CURR.pct, obs:CURR.obs, estado:CURR.estado||"pendiente",
-      data:{ total:t.total, neto:t.neto, iva:t.iva, despMode:CURR.despMode } };
+      data:{ total:t.total, neto:t.neto, iva:t.iva, despMode:CURR.despMode, firmaIdx:($("b-firma")?parseInt($("b-firma").value):0) } };
     if(CURR.id){ await tUpdate("cotizaciones", CURR.id, row); }
     else { const r=await tInsert("cotizaciones", row); const saved=Array.isArray(r)?r[0]:r; CURR.id=saved.id; }
     $("b-num").value=CURR.numero; $("builder-status").textContent="Guardada: "+CURR.numero;
@@ -876,45 +880,92 @@ async function rechazar(id){
   catch(e){ alert("No se pudo rechazar: "+e.message); }
 }
 
-/* ----- PDF (jsPDF + autotable) ----- */
+/* ----- PDF (jsPDF + autotable) — branding por empresa desde empresa.config ----- */
 function empresaPDFHeader(){ const e=MT.empresaFull||{}, c=MT.config||{};
-  return { nombre:e.nombre||(MT.empresa&&MT.empresa.nombre)||"", rut:e.rut||c.rut||"",
-           direccion:c.direccion||"", telefono:c.telefono||"", emails:c.emails||"", web:c.web||"", bancos:c.bancos||[] }; }
-function pdfCotizacion(q, cli, out){
+  return { nombre:e.nombre||c.razon_social||(MT.empresa&&MT.empresa.nombre)||"", rut:e.rut||c.rut||"",
+           direccion:c.direccion||"", telefono:c.telefono||"", emails:c.emails||"", web:c.web||"", tienda:c.tienda||"",
+           bancos:c.bancos||[], firmas:c.firmas||[], nota:c.nota_importante||"", logo_url:e.logo_url||c.logo_url||"" }; }
+/* Carga una imagen (logo o foto) evitando problemas CORS vía proxy, y la vuelve dataURL para jsPDF */
+function proxImg(url){ if(!url) return ""; if(url.indexOf("data:")===0) return url; return "https://images.weserv.nl/?url="+encodeURIComponent(url.replace(/^https?:\/\//,"")); }
+function cargarImagen(url){ return new Promise(res=>{ if(!url){ res(null); return; }
+  const im=new Image(); im.crossOrigin="anonymous";
+  im.onload=()=>{ try{ const mw=420, sc=Math.min(1, mw/(im.naturalWidth||mw)); const cv=document.createElement("canvas");
+      cv.width=Math.max(1,Math.round((im.naturalWidth||mw)*sc)); cv.height=Math.max(1,Math.round((im.naturalHeight||mw)*sc));
+      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); res({data:cv.toDataURL("image/jpeg",0.82), w:cv.width, h:cv.height}); }
+    catch(_){ res(null); } };
+  im.onerror=()=>res(null); im.src=proxImg(url); }); }
+function itemImg(it){ return it.imagen || ((CAT.find(p=>p.id===it.productoId)||{}).imagen) || ""; }
+async function pdfHeader(doc, H, titulo, meta){
+  let logo=null; try{ logo=await cargarImagen(H.logo_url); }catch(_){}
+  let tx=14;
+  if(logo){ const w=27, h=Math.min(20, w*(logo.h/logo.w)); try{ doc.addImage(logo.data,"JPEG",13,11,w,h); tx=45; }catch(_){ tx=14; } }
+  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa", tx, 17);
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.2); doc.setTextColor(80);
+  const lines=[H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono, H.emails, [H.web,H.tienda].filter(Boolean).join(" · ")].filter(Boolean);
+  doc.text(lines, tx, 23);
+  doc.setFont(undefined,'bold'); doc.setFontSize(17); doc.setTextColor(22,50,79); doc.text(titulo, 196, 17, {align:'right'});
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80); doc.text(meta, 196, 24, {align:'right'});
+  doc.setDrawColor(232,135,30); doc.setLineWidth(0.9); doc.line(14, 40, 196, 40); doc.setLineWidth(0.2); doc.setDrawColor(200);
+  return 46;
+}
+function pdfFooter(doc, H){
+  doc.setFontSize(7); doc.setTextColor(120);
+  const line=[H.nombre, H.rut?("RUT "+H.rut):"", H.direccion, H.emails, H.web].filter(Boolean).join(" · ");
+  doc.text(doc.splitTextToSize(line,182), 105, 288, {align:'center'});
+}
+function fillFirmas(){ const sel=$("b-firma"); if(!sel) return; const fs=(MT.config&&MT.config.firmas)||[];
+  sel.innerHTML = fs.length ? fs.map((f,i)=>`<option value="${i}">${esc(f.nombre||"")}${f.cargo?(" · "+esc(f.cargo)):""}</option>`).join("")+'<option value="-1">— sin firma —</option>' : '<option value="-1">— sin firma —</option>'; }
+async function pdfCotizacion(q, cli, out, firmaIdx){
   const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader(); const t=quoteTotals(q);
-  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa", 14, 18);
-  doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(80);
-  doc.text([H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono?("Tel: "+H.telefono):"", H.emails, H.web].filter(Boolean), 14, 24);
-  doc.setFont(undefined,'bold'); doc.setFontSize(16); doc.setTextColor(22,50,79); doc.text("PRESUPUESTO", 196, 16, {align:'right'});
-  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80);
-  doc.text(["N°: "+(q.numero||""), "Fecha: "+(q.fecha||"")], 196, 23, {align:'right'});
-  let y=44; doc.setFontSize(9); doc.setTextColor(30);
-  const cinfo=`Cliente: ${cli.nombre||""}  |  RUT: ${cli.rut||""}  |  Correo: ${cli.email||""}  |  Tel: ${cli.telefono||""}`;
-  const cl=doc.splitTextToSize(cinfo,182); doc.text(cl,14,y); y+=cl.length*4+3;
-  const body=q.items.map(it=>{ const p=qUnit(q,it); const nom=it.nombre+((it.detalle&&it.detalle.trim())?("\n"+it.detalle.trim()):""); return [nom, it.cantidad, money(p), money(p*it.cantidad)]; });
-  doc.autoTable({ startY:y, head:[["Producto","Cant.","Precio neto","Total"]], body,
-    styles:{fontSize:9,valign:"middle"}, headStyles:{fillColor:[22,50,79]},
-    columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  const fechaFmt=(q.fecha||hoy()).split("-").reverse().join("-");
+  let validez=""; try{ const d=new Date((q.fecha||hoy())+"T00:00:00"); d.setDate(d.getDate()+15); validez=d.toISOString().slice(0,10).split("-").reverse().join("-"); }catch(_){}
+  let y=await pdfHeader(doc, H, "PRESUPUESTO", ["N°: "+(q.numero||""), "Fecha: "+fechaFmt, validez?("Válido hasta: "+validez):""].filter(Boolean));
+  doc.setFontSize(9); doc.setTextColor(30);
+  const cinfo=`Empresa/Institución: ${cli.nombre||""}  |  RUT: ${cli.rut||""}  |  Correo: ${cli.email||""}  |  Teléfono: ${cli.telefono||""}`;
+  const cl=doc.splitTextToSize(cinfo,182); doc.text(cl,14,y); y+=cl.length*4+1;
+  if(cli.direccion){ const dl=doc.splitTextToSize("Dirección/Región: "+cli.direccion,182); doc.text(dl,14,y); y+=dl.length*4; }
+  y+=3;
+  const imgs={}; for(const it of (q.items||[])){ const u=itemImg(it); if(u && imgs[u]===undefined){ imgs[u]=await cargarImagen(u); } }
+  const conFoto=(q.items||[]).some(it=>imgs[itemImg(it)]);
+  const body=(q.items||[]).map(it=>{ const p=qUnit(q,it); const nom=it.nombre+((it.detalle&&it.detalle.trim())?("\n"+it.detalle.trim()):"");
+    return conFoto ? ["", nom, it.cantidad, money(p), money(p*it.cantidad)] : [nom, it.cantidad, money(p), money(p*it.cantidad)]; });
+  const head = conFoto ? [["Foto","Producto","Cant.","Precio neto","Total"]] : [["Producto","Cant.","Precio neto","Total"]];
+  const colStyles = conFoto ? {0:{cellWidth:20},2:{halign:"center",cellWidth:16},3:{halign:"right",cellWidth:30},4:{halign:"right",cellWidth:30}}
+                            : {1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}};
+  doc.autoTable({ startY:y, head, body, styles:{fontSize:9,valign:"middle",minCellHeight:conFoto?16:8}, headStyles:{fillColor:[22,50,79]}, columnStyles:colStyles,
+    didDrawCell:(d)=>{ if(conFoto && d.section==='body' && d.column.index===0){ const it=(q.items||[])[d.row.index]; const im=it&&imgs[itemImg(it)];
+        if(im){ const cw=d.cell.width-2, ch=d.cell.height-2; let w=cw, h=w*(im.h/im.w); if(h>ch){ h=ch; w=h*(im.w/im.h); }
+          try{ doc.addImage(im.data,"JPEG", d.cell.x+(d.cell.width-w)/2, d.cell.y+(d.cell.height-h)/2, w, h); }catch(_){} } } } });
   doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9},
     body:[["Subtotal neto",money(t.neto)],["IVA "+ivaPct()+"%",money(t.iva)],["TOTAL",money(t.total)]],
     columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
   let ey=doc.lastAutoTable.finalY+8; doc.setTextColor(50);
   if(q.obs){ doc.setFontSize(8); const o=doc.splitTextToSize("Observaciones: "+q.obs,182); doc.text(o,14,ey); ey+=o.length*3.5+3; }
-  if(H.bancos.length){ doc.setFontSize(8); doc.setTextColor(30); doc.text("Datos para transferencia:",14,ey); ey+=4; doc.setFontSize(7.5); doc.setTextColor(60); H.bancos.forEach(b=>{ doc.text("• "+b,14,ey); ey+=3.6; }); }
-  ey+=3; doc.setFontSize(7.5); doc.setTextColor(90);
-  doc.text(doc.splitTextToSize("Precios en CLP, netos + IVA ("+ivaPct()+"%). Presupuesto válido 15 días. Precios y stock sujetos a confirmación.",182),14,ey);
+  const fs=H.firmas||[]; let fi=(firmaIdx!=null?firmaIdx:(q.firmaIdx!=null?q.firmaIdx:0)); const firma=(fi>=0)?fs[fi]:null;
+  if(firma){ ey+=7; const cx=105; doc.setDrawColor(120); doc.line(cx-30,ey,cx+30,ey); ey+=5;
+    doc.setFont(undefined,'bold'); doc.setFontSize(9.5); doc.setTextColor(20); doc.text(firma.nombre||"",cx,ey,{align:'center'}); ey+=4;
+    doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(70);
+    if(firma.cargo){ doc.text(firma.cargo,cx,ey,{align:'center'}); ey+=4; } if(firma.tel){ doc.text(firma.tel,cx,ey,{align:'center'}); ey+=4; } }
+  ey+=4;
+  if((H.bancos||[]).length){ doc.setFont(undefined,'bold'); doc.setFontSize(8); doc.setTextColor(30); doc.text("Datos para transferencia:",14,ey); ey+=4;
+    doc.setFont(undefined,'normal'); doc.setFontSize(7.5); doc.setTextColor(60); H.bancos.forEach(b=>{ const bl=doc.splitTextToSize("• "+b,182); doc.text(bl,14,ey); ey+=bl.length*3.6; }); ey+=1; }
+  if(H.nota){ doc.setFont(undefined,'bold'); doc.setFontSize(8); doc.setTextColor(180,30,30); doc.text("IMPORTANTE: "+H.nota,14,ey); ey+=5; doc.setFont(undefined,'normal'); }
+  doc.setFontSize(7.5); doc.setTextColor(90);
+  doc.text(doc.splitTextToSize("Precios en CLP, netos + IVA ("+ivaPct()+"%). Presupuesto válido 15 días. Precios y stock sujetos a confirmación. Despacho a todo Chile (valor según destino).",182),14,ey);
+  pdfFooter(doc,H);
   if(out==="save") doc.save((q.numero||"cotizacion")+".pdf"); else doc.output("dataurlnewwindow");
 }
-function builderPDF(){
+async function builderPDF(){
   if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
   collectQuote();
-  const cli={ nombre:$("b-cli-nombre").value.trim(), rut:$("b-cli-rut").value.trim(), email:$("b-cli-correo").value.trim(), telefono:$("b-cli-tel").value.trim() };
-  pdfCotizacion(CURR, cli, "save");
+  const cli={ nombre:$("b-cli-nombre").value.trim(), rut:$("b-cli-rut").value.trim(), email:$("b-cli-correo").value.trim(), telefono:$("b-cli-tel").value.trim(), direccion:$("b-cli-dir").value.trim() };
+  const fi = $("b-firma") ? (parseInt($("b-firma").value)) : 0;
+  await pdfCotizacion(CURR, cli, "save", fi);
 }
 async function pdfQuote(id){
   const q=await fetchQuote(id); if(!q) return;
   const cli=CLIENTES.find(c=>c.id===q.cliente_id)||{};
-  pdfCotizacion({ items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct", numero:q.numero, fecha:q.fecha, obs:q.obs }, cli, "save");
+  await pdfCotizacion({ items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct", numero:q.numero, fecha:q.fecha, obs:q.obs, firmaIdx:(q.data&&q.data.firmaIdx) }, cli, "save");
 }
 
 /* ----- Utilidades RUT / números (portadas de la v30) ----- */
@@ -1199,18 +1250,15 @@ async function guardarOC(){
 }
 async function delOC(id){ if(!confirm("¿Eliminar esta orden de compra?")) return; try{ await tDelete("ordenes_compra", id); renderOrdenes(); }catch(e){ alert(e.message); } }
 function pdfOC(id){ fetchOC(id).then(o=>{ if(o) pdfDocOC(o); }); }
-function pdfDocOC(o){
+async function pdfDocOC(o){
   const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
-  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa",14,18);
-  doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(80); doc.text([H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono?("Tel: "+H.telefono):""].filter(Boolean),14,24);
-  doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.setTextColor(22,50,79); doc.text("ORDEN DE COMPRA",196,16,{align:'right'});
-  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80); doc.text(["N°: "+(o.numero||""),"Fecha: "+hoy()],196,23,{align:'right'});
-  doc.setFontSize(9); doc.setTextColor(30); doc.text("Cliente: "+(o.cliente_nombre||""),14,42);
+  const y=await pdfHeader(doc, H, "ORDEN DE COMPRA", ["N°: "+(o.numero||""),"Fecha: "+hoy()]);
+  doc.setFontSize(9); doc.setTextColor(30); doc.text("Cliente: "+(o.cliente_nombre||""),14,y);
   const body=(o.items||[]).map(it=>[it.nombre, it.cantidad, money(it.precio_venta), money((it.precio_venta||0)*it.cantidad)]);
   const neto=(o.items||[]).reduce((a,it)=>a+(it.precio_venta||0)*it.cantidad,0), iva=Math.round(neto*ivaPct()/100);
-  doc.autoTable({ startY:48, head:[["Producto","Cant.","Precio venta","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:y+4, head:[["Producto","Cant.","Precio venta","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
   doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Subtotal",money(neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(neto+iva)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
-  doc.save((o.numero||"OC")+".pdf");
+  pdfFooter(doc,H); doc.save((o.numero||"OC")+".pdf");
 }
 function abrirGenerarNota(ocId){
   fetchOC(ocId).then(o=>{ if(!o) return; NOTA_SRC=o;
@@ -1254,18 +1302,15 @@ async function fetchNota(id){ const r=await tSel("notas_pedido","id=eq."+id+"&se
 async function notaEstado(id,v){ try{ await tUpdate("notas_pedido", id, {estado:v}); renderNotas(); }catch(e){ alert(e.message); } }
 async function delNota(id){ if(!confirm("¿Eliminar esta nota de pedido?")) return; try{ await tDelete("notas_pedido", id); renderNotas(); }catch(e){ alert(e.message); } }
 function pdfNota(id){ fetchNota(id).then(n=>{ if(n) pdfDocNota(n); }); }
-function pdfDocNota(n){
+async function pdfDocNota(n){
   const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
-  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa",14,18);
-  doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(80); doc.text([H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono?("Tel: "+H.telefono):""].filter(Boolean),14,24);
-  doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.setTextColor(22,50,79); doc.text("NOTA DE PEDIDO",196,16,{align:'right'});
-  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80); doc.text(["N°: "+(n.numero||""),"Fecha: "+((n.created_at||hoy()).slice(0,10))],196,23,{align:'right'});
-  doc.setFontSize(9); doc.setTextColor(30); doc.text("Proveedor: "+(n.proveedor_nombre||""),14,42);
+  const y=await pdfHeader(doc, H, "NOTA DE PEDIDO", ["N°: "+(n.numero||""),"Fecha: "+((n.created_at||hoy()).slice(0,10))]);
+  doc.setFontSize(9); doc.setTextColor(30); doc.text("Proveedor: "+(n.proveedor_nombre||""),14,y);
   const body=(n.items||[]).map(it=>[it.nombre, it.cantidad, money(it.costo), money((it.costo||0)*it.cantidad)]);
   const iva=Math.round((Number(n.costo_neto)||0)*ivaPct()/100);
-  doc.autoTable({ startY:48, head:[["Producto","Cant.","Costo neto","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:y+4, head:[["Producto","Cant.","Costo neto","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
   doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Costo neto",money(n.costo_neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(n.total)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
-  doc.save((n.numero||"NP")+".pdf");
+  pdfFooter(doc,H); doc.save((n.numero||"NP")+".pdf");
 }
 </script>
 </body>
