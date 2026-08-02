@@ -13,6 +13,24 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
 fi
 
+# ── Credenciales MCP: cargar .mcp.env (gitignored) si existe ──
+# Persiste cada variable en la sesión para que ${VAR} de .mcp.json se resuelva.
+if [ -f .mcp.env ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "[session-start] cargando credenciales de .mcp.env…"
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Saltear comentarios y líneas vacías; exigir formato CLAVE=valor.
+    case "$line" in
+      ''|\#*) continue ;;
+    esac
+    if printf '%s' "$line" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*='; then
+      key="${line%%=*}"
+      val="${line#*=}"
+      [ -z "$val" ] && continue
+      echo "export ${key}=${val}" >> "$CLAUDE_ENV_FILE"
+    fi
+  done < .mcp.env
+fi
+
 # ── 1) Dependencias de Node (Cloudflare Workers + Hono) ──
 if [ -f package.json ]; then
   echo "[session-start] npm install…"
