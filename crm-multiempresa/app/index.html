@@ -55,7 +55,7 @@ h2{color:var(--nav);margin-top:0;}
 .muted{color:#64748b;font-size:12px;}
 /* Cotizaciones */
 .searchbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
-.builder{display:grid;grid-template-columns:1.45fr 1fr;gap:16px;align-items:start;}
+.builder{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch;}
 .panel{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .panel h3{color:var(--nav);margin:0 0 8px;}
 .catlist{max-height:48vh;min-height:220px;overflow:auto;border:1px solid var(--linea);border-radius:8px;}
@@ -1068,7 +1068,7 @@ function renderItems(){
           </div>
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:13px">${esc(it.nombre)}</div>
-            <input placeholder="Detalle (opcional) — se muestra en el PDF" value="${esc(it.detalle||"")}" oninput="setItemDetalle(${i},this.value)" style="width:100%;margin-top:3px;font-size:11px">
+            <textarea placeholder="Detalle del producto (se muestra en el PDF)" oninput="setItemDetalle(${i},this.value)" rows="3" style="width:100%;margin-top:3px;font-size:11px;line-height:1.35;resize:vertical;min-height:52px">${esc(it.detalle||"")}</textarea>
             <div style="display:flex;gap:4px;margin-top:3px">
               <input placeholder="Link del producto (interno — el cliente NO lo ve)" value="${esc(it.link||"")}" oninput="setItemLink(${i},this.value)" style="flex:1;font-size:11px">
               <button class="btn-sec" style="padding:2px 8px" onclick="buscarProdWeb(${i})" title="Buscar el producto en la web (imagen/link)">🔎 Buscar</button>
@@ -1086,7 +1086,7 @@ function renderItems(){
 }
 function setItemCant(i,v){ if(CURR.items[i]){ CURR.items[i].cantidad=Math.max(1,parseInt(v)||1); renderItems(); } }
 function setItemPrecio(i,v){ if(CURR.items[i]){ const n=parseNum(v); CURR.items[i].precioFijo=(n>0)?n:0; renderItems(); } }
-function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,200); }
+function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,400); }
 function setItemLink(i,v){ if(CURR.items[i]) CURR.items[i].link=(v||"").trim(); }
 function setItemImagen(i,v){ if(CURR.items[i]){ CURR.items[i].imagen=(v||"").trim(); renderItems(); } }
 // Búsqueda del producto en la web (imagen/link). Abre búsqueda de compras + imágenes.
