@@ -19,6 +19,7 @@
 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{--nav:#16324f;--nav2:#1f4468;--acc:#e8871e;--acc2:#cf7715;--azul:#2563eb;--verde:#16a34a;--gris:#eef1f5;--linea:#e2e8f0;--txt:#1f2937;--rojo:#c0392b;--oro:#c9962b;}
 *{box-sizing:border-box;font-family:'Segoe UI',Roboto,Arial,sans-serif;}
@@ -54,10 +55,10 @@ h2{color:var(--nav);margin-top:0;}
 .muted{color:#64748b;font-size:12px;}
 /* Cotizaciones */
 .searchbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
-.builder{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.builder{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch;}
 .panel{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .panel h3{color:var(--nav);margin:0 0 8px;}
-.catlist{max-height:240px;overflow:auto;border:1px solid var(--linea);border-radius:8px;}
+.catlist{max-height:48vh;min-height:220px;overflow:auto;border:1px solid var(--linea);border-radius:8px;}
 .catlist .it{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-bottom:1px solid #f1f5f9;align-items:center;}
 .catlist .it small{color:#64748b;}
 .cli-wrap{position:relative;}
@@ -68,7 +69,50 @@ h2{color:var(--nav);margin-top:0;}
 .est.p{background:#64748b;} .est.a{background:var(--verde);} .est.r{background:var(--rojo);}
 .right{text-align:right;} .big{font-weight:800;font-size:15px;}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
-@media(max-width:820px){.builder{grid-template-columns:1fr;}}
+@media(max-width:960px){.builder{grid-template-columns:1fr;}}
+
+/* ===================== TEMA GLOBAL v2 — Arquitectura 3 columnas + tipografía geométrica ===================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--font:'Inter','Segoe UI',Roboto,system-ui,sans-serif;--sombra:0 1px 3px rgba(16,42,67,.06),0 1px 2px rgba(16,42,67,.04);--sombra2:0 4px 16px rgba(16,42,67,.08);}
+*{font-family:var(--font);}
+body{-webkit-font-smoothing:antialiased;letter-spacing:-.005em;}
+/* Números financieros con cifras tabulares para lectura de un vistazo */
+.kpi .box b,.big,.right,table td,.mono-num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;}
+/* Jerarquía de títulos: sección en mayúsculas negrita con espaciado amplio */
+h2{font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:17px;display:flex;align-items:center;gap:8px;}
+.panel h3,h3{font-weight:600;letter-spacing:-.01em;}
+.col-title{font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:#94a3b8;margin:0 0 10px;}
+/* KPIs de gran tamaño */
+.kpi{gap:12px;} .kpi .box{padding:16px 18px;border:1px solid var(--linea);box-shadow:var(--sombra);border-radius:14px;}
+.kpi .box b{font-size:30px;font-weight:700;line-height:1.1;letter-spacing:-.02em;} .kpi .box span{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8;}
+/* Tarjetas y superficies más limpias en alta resolución */
+.card{border:1px solid var(--linea);box-shadow:var(--sombra);border-radius:14px;}
+.panel{border:1px solid var(--linea);box-shadow:var(--sombra);border-radius:14px;}
+/* Más ancho para pantallas de alta resolución */
+main{max-width:1360px;padding:22px;}
+/* Navegación superior más nítida */
+nav#nav{padding:8px 14px;gap:8px;box-shadow:var(--sombra);}
+nav#nav button{border-radius:9px;font-weight:600;padding:8px 13px;transition:all .12s;}
+nav#nav button:hover{background:#f1f5f9;} nav#nav button.active{box-shadow:0 2px 8px rgba(232,135,30,.3);}
+header.top .brand{letter-spacing:-.02em;}
+/* Tablas legibles */
+th{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:9px 10px;}
+td{padding:9px 10px;}
+/* ---- Sistema de rejilla de 3 columnas (Operativa | Transaccional | Analítica) ---- */
+.grid-3{display:grid;grid-template-columns:0.95fr 1.25fr 0.95fr;gap:16px;align-items:start;}
+.grid-3 .col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+/* Tablet / notebook: 2 columnas + la operativa como panel lateral colapsable */
+@media(max-width:1180px){
+  .grid-3{grid-template-columns:1.2fr 0.9fr;}
+  .grid-3 .col-operativa{grid-column:1 / -1;order:-1;}
+  .grid-3 .col-operativa .card,.grid-3 .col-operativa .panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+}
+/* Móvil: una sola columna */
+@media(max-width:760px){
+  .grid-3{grid-template-columns:1fr;}
+  .grid-3 .col-operativa .card,.grid-3 .col-operativa .panel{display:block;}
+  main{padding:14px;} .kpi .box b{font-size:26px;}
+}
 </style>
 </head>
 <body>
@@ -118,11 +162,58 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
-    <!-- INICIO / DASHBOARD de la empresa activa -->
+    <!-- INICIO / DASHBOARD de la empresa activa — arquitectura 3 columnas -->
     <section id="s-inicio" class="section">
-      <div class="card">
-        <h2>📊 Resumen · <span id="ini-emp"></span></h2>
-        <div class="kpi" id="ini-kpi"></div>
+      <h2 style="margin-bottom:14px">📊 Resumen · <span id="ini-emp"></span></h2>
+      <div class="grid-3">
+
+        <!-- IZQUIERDA · OPERATIVA -->
+        <div class="col col-operativa">
+          <div class="card">
+            <div class="col-title">Operativa · Filtros</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div><span class="mini">Desde</span><input type="date" id="ini-desde" onchange="renderInicio()"></div>
+              <div><span class="mini">Hasta</span><input type="date" id="ini-hasta" onchange="renderInicio()"></div>
+              <div><span class="mini">Cliente</span><input id="ini-cliq" placeholder="🔍 Nombre o RUT" oninput="renderInicio()"></div>
+              <select id="ini-cliente" onchange="renderInicio()"><option value="">Todos los clientes</option></select>
+              <select id="ini-prov" onchange="renderInicio()"><option value="">Todos los proveedores</option></select>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:12px">
+              <button class="btn-sec" style="flex:1" onclick="exportInicioPDF()">📄 PDF</button>
+              <button class="btn-sec" style="flex:1" onclick="exportInicioCSV()">⬇ CSV</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CENTRO · TRANSACCIONAL -->
+        <div class="col col-transaccional">
+          <div class="card">
+            <div class="col-title">Transaccional · Indicadores</div>
+            <div class="kpi" id="ini-kpi"></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:2px 0 8px">💰 Ventas por mes</h3>
+            <div style="position:relative;height:200px"><canvas id="ch-ventas"></canvas></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:2px 0 8px">🛒 Compras por mes</h3>
+            <div style="position:relative;height:200px"><canvas id="ch-compras"></canvas></div>
+          </div>
+        </div>
+
+        <!-- DERECHA · ANALÍTICA -->
+        <div class="col col-analitica">
+          <div class="card">
+            <div class="col-title">Analítica</div>
+            <h3 style="margin:2px 0 8px">📈 Ganancia por mes</h3>
+            <div style="position:relative;height:190px"><canvas id="ch-ganancia"></canvas></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:2px 0 8px">📋 Cotizaciones por estado</h3>
+            <div style="position:relative;height:190px"><canvas id="ch-estado"></canvas></div>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -130,16 +221,27 @@ h2{color:var(--nav);margin-top:0;}
     <section id="s-clientes" class="section">
       <div class="card">
         <h2>👤 Clientes</h2>
-        <div class="row">
+        <div class="searchbar">
+          <input id="cl-q" placeholder="🔍 Buscar por RUT o nombre" oninput="renderClientes()">
+          <button class="btn-sec" onclick="$('cl-import').click()">Importar CSV</button>
+          <input type="file" id="cl-import" accept=".csv" class="hidden" onchange="importClientesCSV(event)">
+          <button class="btn-sec" onclick="exportClientesCSV()">Exportar CSV</button>
+          <span class="mini" id="cl-count"></span>
+        </div>
+        <div class="row" style="margin-top:8px;align-items:flex-end">
+          <input type="hidden" id="cl-id">
           <div><label>Nombre *</label><input id="cl-nombre"></div>
           <div><label>RUT</label><input id="cl-rut"></div>
           <div><label>Teléfono</label><input id="cl-tel"></div>
           <div><label>Email</label><input id="cl-mail"></div>
-          <div style="flex:0;min-width:auto;align-self:flex-end"><button class="btn-green" onclick="addCliente()">+ Guardar</button></div>
+          <div style="flex:1"><label>Dirección</label><input id="cl-dir"></div>
+          <div style="flex:0;min-width:auto;display:flex;gap:6px"><button class="btn-green" onclick="guardarCliente()">💾 Guardar</button><button class="btn-gray" onclick="limpiarCliente()">Limpiar</button></div>
         </div>
         <div style="height:12px"></div>
-        <table><thead><tr><th>Nombre</th><th>RUT</th><th>Teléfono</th><th>Email</th><th></th></tr></thead>
-        <tbody id="cl-body"></tbody></table>
+        <div style="overflow:auto;max-height:56vh">
+          <table><thead><tr><th>Nombre</th><th>RUT</th><th>Teléfono</th><th>Email</th><th>Dirección</th><th></th></tr></thead>
+          <tbody id="cl-body"></tbody></table>
+        </div>
       </div>
     </section>
 
@@ -172,7 +274,11 @@ h2{color:var(--nav);margin-top:0;}
               <input type="number" id="b-fc-cant" value="1" min="1" style="max-width:70px">
             </div>
             <div class="row" style="margin-top:6px">
+              <input id="b-fc-link" placeholder="Link web (de dónde cotizaste) — solo interno, el cliente NO lo ve" style="flex:2">
               <input id="b-fc-prov" placeholder="Proveedor (opcional)">
+            </div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-img" placeholder="URL de imagen (opcional) — sale en el PDF" style="flex:2">
               <button class="btn" style="flex:0;white-space:nowrap" onclick="addFueraItem()">+ Agregar</button>
             </div>
           </div>
@@ -232,9 +338,10 @@ h2{color:var(--nav);margin-top:0;}
           </div>
 
           <div class="actions">
-            <button class="btn" onclick="builderPDF()">📄 Presupuesto (PDF)</button>
-            <button class="btn-dark" onclick="builderSave()">💾 Guardar</button>
+            <button class="btn" onclick="builderPDF()">📄 Descargar PDF</button>
+            <button class="btn-dark" onclick="builderGuardar()">💾 Guardar</button>
             <button class="btn-green" onclick="builderWhatsApp()">WhatsApp</button>
+            <button class="btn-dark" onclick="builderMercadoPublico()">🏛️ Publicar en Mercado Público</button>
             <button class="btn-gray" onclick="nuevaCotiz()">Limpiar</button>
           </div>
         </div>
@@ -311,10 +418,13 @@ h2{color:var(--nav);margin-top:0;}
         <h2>📈 Resúmenes</h2>
         <div id="res-tabs" class="searchbar">
           <button class="btn-sec active" data-t="vendedor" onclick="resTab('vendedor')">Por vendedor</button>
+          <button class="btn-sec" data-t="detalle" onclick="resTab('detalle')">Detalle de ventas</button>
           <button class="btn-sec" data-t="proveedor" onclick="resTab('proveedor')">Por proveedor</button>
           <button class="btn-sec" data-t="mensual" onclick="resTab('mensual')">Mensual</button>
           <span class="mini">Desde</span><input type="date" id="res-desde" onchange="pintarResumen()">
           <span class="mini">Hasta</span><input type="date" id="res-hasta" onchange="pintarResumen()">
+          <button class="btn-sec" onclick="exportResumenPDF()">📄 PDF</button>
+          <button class="btn-sec" onclick="exportResumenCSV()">⬇ Excel (CSV)</button>
         </div>
         <div style="overflow:auto;max-height:64vh">
           <table><thead id="res-head"></thead><tbody id="res-body"></tbody></table>
@@ -322,25 +432,67 @@ h2{color:var(--nav);margin-top:0;}
       </div>
     </section>
 
+    <!-- POR APROBAR (Compra Ágil) -->
+    <section id="s-poraprobar" class="section">
+      <div class="card">
+        <h2>✅ Por aprobar — Compra Ágil</h2>
+        <p class="mini">Oportunidades listas para revisar y postular. «Cotizar» crea la cotización con el código de la oportunidad; «Postular» abre ChileCompra y la marca como postulada.</p>
+        <div class="searchbar">
+          <input id="pa-q" placeholder="🔍 Institución, código/ID o ítem" oninput="renderPorAprobar()">
+          <input id="pa-rut" placeholder="RUT institución" oninput="renderPorAprobar()" style="max-width:150px">
+          <input id="pa-region" placeholder="Región" oninput="renderPorAprobar()" style="max-width:150px">
+          <span class="mini" id="pa-count"></span>
+        </div>
+        <div id="pa-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;max-height:64vh;overflow:auto;margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- MERCADO PÚBLICO / COMPRA ÁGIL -->
+    <section id="s-mercadopublico" class="section">
+      <div class="card">
+        <h2>🏛️ Mercado Público / Compra Ágil</h2>
+        <p class="mini">Oportunidades de ChileCompra por empresa. Marca el estado, abre la ficha o crea una cotización desde una oportunidad. «Sincronizar» trae nuevas desde tu Apps Script.</p>
+        <div class="searchbar">
+          <input id="mp-q" placeholder="🔍 Palabra clave (código, organismo o ítem)" oninput="renderMP()">
+          <select id="mp-tipo" onchange="renderMP()"><option value="">Todos los tipos</option><option value="compra_agil">Compra Ágil</option><option value="licitacion">Licitaciones</option><option value="convenio_marco">Convenio Marco</option></select>
+          <select id="mp-estado" onchange="renderMP()"><option value="">Todos</option><option value="pendiente">pendiente</option><option value="cotizada">cotizada</option><option value="ganada">ganada</option><option value="perdida">perdida</option><option value="descartada">descartada</option></select>
+          <span class="mini">Cierre</span><input type="date" id="mp-desde" onchange="renderMP()" title="Cierre desde">
+          <input type="date" id="mp-hasta" onchange="renderMP()" title="Cierre hasta">
+          <select id="mp-orden" onchange="renderMP()"><option value="cierre_asc">Cierre ↑ (próximos)</option><option value="cierre_desc">Cierre ↓</option></select>
+          <label class="mini" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="mp-cerradas" onchange="renderMP()" style="width:auto"> ver cerradas</label>
+          <button class="btn-sec" onclick="mpSync()">🔄 Sincronizar</button>
+          <button class="btn-red" onclick="mpLimpiarCerradas()" title="Borra las oportunidades ya cerradas para aligerar el sistema">🧹 Limpiar cerradas</button>
+          <span class="mini" id="mp-count"></span>
+        </div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>Código</th><th>Tipo</th><th>Nombre</th><th>Cierre</th><th>Estado MP</th><th>Estado interno</th><th></th></tr></thead>
+          <tbody id="mp-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
     <!-- USUARIOS -->
     <section id="s-usuarios" class="section">
       <div class="card">
-        <h2>👥 Usuarios y accesos <span class="mini">(de esta empresa)</span></h2>
-        <p class="mini">El <b>Administrador</b> ve costos y todo; el <b>Vendedor</b> solo cotiza. Se autentican con Supabase Auth. (Si el proyecto exige confirmar correo, el usuario deberá confirmarlo antes de entrar.)</p>
+        <h2>👥 Usuarios y accesos</h2>
+        <p class="mini">Crea usuarios, elige <b>con qué empresa</b> trabajan y qué <b>privilegio</b> tienen. El <b>Administrador</b> ve costos y todo; el <b>Vendedor</b> solo cotiza. Se autentican con Supabase Auth.</p>
         <div class="row" style="align-items:flex-end">
+          <div style="flex:1"><label>🏢 Gestionar usuarios de la empresa</label><select id="us-emp" onchange="renderUsuarios()"></select></div>
+        </div>
+        <div class="row" style="align-items:flex-end;margin-top:8px">
           <div style="flex:1"><label>Crear usuario — correo</label><input id="us-email" placeholder="persona@empresa.com"></div>
           <div><label>Contraseña</label><input id="us-pass" type="text" placeholder="mín. 6"></div>
-          <div><label>Rol</label><select id="us-rol"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
-          <div><button class="btn-dark" onclick="usCrear()">+ Crear</button></div>
+          <div><label>Privilegio</label><select id="us-rol"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
+          <div><button class="btn-dark" onclick="usCrear()">+ Crear y asignar</button></div>
         </div>
         <div class="mini" id="us-msg" style="margin-top:4px"></div>
         <div class="row" style="align-items:flex-end;margin-top:8px">
-          <div style="flex:1"><label>…o agregar un usuario ya registrado (por correo)</label><input id="us-email2" placeholder="correo existente"></div>
-          <div><label>Rol</label><select id="us-rol2"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
-          <div><button class="btn-sec" onclick="usAgregarExistente()">Agregar</button></div>
+          <div style="flex:1"><label>…o asignar un usuario ya registrado (por correo)</label><input id="us-email2" placeholder="correo existente"></div>
+          <div><label>Privilegio</label><select id="us-rol2"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
+          <div><button class="btn-sec" onclick="usAgregarExistente()">Asignar</button></div>
         </div>
         <div style="overflow:auto;max-height:52vh;margin-top:12px">
-          <table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Acceso</th></tr></thead><tbody id="us-body"></tbody></table>
+          <table><thead><tr><th>Nombre</th><th>Correo</th><th>Privilegio</th><th>Acceso</th></tr></thead><tbody id="us-body"></tbody></table>
         </div>
       </div>
     </section>
@@ -399,7 +551,7 @@ h2{color:var(--nav);margin-top:0;}
         <p class="mini">Se crean al <b>aprobar</b> una cotización. Aquí puedes editar precios de venta y generar la Nota de Pedido al proveedor.</p>
         <div class="searchbar"><input id="oc-q" placeholder="🔍 Buscar N° OC o cliente" oninput="renderOrdenes()"></div>
         <div style="overflow:auto;max-height:62vh">
-          <table><thead><tr><th>N° OC</th><th>Cotización</th><th>Cliente</th><th class="right">Total venta</th><th>Estado</th><th></th></tr></thead>
+          <table><thead><tr><th>N° OC</th><th>Secuencia · Cot ➜ OC ➜ Nota</th><th>Cliente</th><th class="right">Total venta</th><th>Estado</th><th></th></tr></thead>
           <tbody id="oc-body"></tbody></table>
         </div>
       </div>
@@ -442,10 +594,22 @@ h2{color:var(--nav);margin-top:0;}
   <dialog id="dlg-nota" style="border:none;border-radius:14px;padding:0;width:min(480px,94vw)">
     <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700">Generar Nota de Pedido</div>
     <div style="padding:18px">
-      <label>Proveedor</label>
-      <select id="nota-prov" style="width:100%"></select>
-      <p class="mini">Se incluyen los productos de la OC de ese proveedor (o todos si eliges «Todos»). Usa el costo neto + IVA.</p>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn-dark" onclick="generarNotaPedido()">Generar</button><button class="btn-gray" onclick="$('dlg-nota').close()">Cancelar</button></div>
+      <label>Proveedor de la nota</label>
+      <select id="nota-prov" style="width:100%" onchange="notaProvChange()"></select>
+      <div id="nota-nuevo" class="hidden" style="margin-top:8px;border:1px dashed #cbd5e1;border-radius:8px;padding:10px">
+        <div class="mini" style="font-weight:700;color:var(--nav)">Nuevo proveedor</div>
+        <input id="nota-nuevo-nombre" placeholder="Nombre / razón social *" style="margin-top:4px">
+        <div class="row" style="margin-top:6px">
+          <input id="nota-nuevo-rut" placeholder="RUT (opcional)">
+          <input id="nota-nuevo-email" placeholder="Correo (opcional)">
+        </div>
+      </div>
+      <div id="nota-items-wrap">
+        <label style="margin-top:8px">Productos a incluir</label>
+        <select id="nota-items" style="width:100%"></select>
+      </div>
+      <p class="mini">Elige el proveedor destinatario (o crea uno nuevo) y qué productos de la OC incluir. Costo neto + IVA.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn-dark" onclick="generarNotaPedido()">Generar / Guardar</button><button class="btn-gray" onclick="$('dlg-nota').close()">Cancelar</button></div>
     </div>
   </dialog>
 
@@ -517,6 +681,7 @@ const SUPA_ANON = localStorage.getItem('SUPA_ANON') || "sb_publishable_KTsmIkFTm
 /* ===== Contexto multiempresa en memoria ===== */
 let MT = { token:null, user:null, perfil:null, superAdmin:false,
            memberships:[], empresa:null, rol:null };
+let EMPRESAS_DISP = [];   // empresas que el admin puede gestionar/asignar
 
 /* ===== Capa REST: siempre con el JWT del usuario ===== */
 function H(){ return { apikey:SUPA_ANON, Authorization:"Bearer "+(MT.token||SUPA_ANON), "Content-Type":"application/json" }; }
@@ -591,6 +756,7 @@ function iniciarSesionUI(){
 }
 
 function poblarSelectorEmpresas(empresas, esSuper){
+  EMPRESAS_DISP = (empresas||[]).slice();
   const sel=$("emp-select"); sel.innerHTML="";
   if(esSuper){ const o=document.createElement("option"); o.value=""; o.textContent="— elige una empresa —"; sel.appendChild(o); }
   empresas.forEach(e=>{ const o=document.createElement("option"); o.value=e.id; o.textContent=e.nombre+(e.estado!=="activa"?" ("+e.estado+")":""); sel.appendChild(o); });
@@ -645,12 +811,14 @@ const MODULES = [
   {id:"inicio",   label:"📊 Inicio",       roles:["super_admin","admin_empresa","supervisor","vendedor","solo_lectura"]},
   {id:"clientes", label:"👤 Clientes",     roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"poraprobar", label:"✅ Por aprobar", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"productos", label:"📦 Productos", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"proveedores", label:"🏭 Proveedores", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"ordenes", label:"📄 Órdenes de compra", roles:["super_admin","admin_empresa","supervisor"]},
   {id:"notas", label:"🧾 Notas de pedido", roles:["super_admin","admin_empresa","supervisor"]},
   {id:"inventario", label:"📦 Inventario", roles:["super_admin","admin_empresa","supervisor"]},
   {id:"resumenes", label:"📈 Resúmenes", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"mercadopublico", label:"🏛️ Mercado Público", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
   {id:"usuarios", label:"👥 Usuarios", roles:["super_admin","admin_empresa"]},
   {id:"config", label:"⚙️ Configuración", roles:["super_admin","admin_empresa"]},
   // SLOT: añade aquí más módulos de la v30 con sus roles.
@@ -668,12 +836,14 @@ function go(id){
   if(id==="inicio")       renderInicio();
   if(id==="clientes")     renderClientes();
   if(id==="cotizaciones") { if(!CURR) nuevaCotiz(); else showBuilder(); }
+  if(id==="poraprobar")   renderPorAprobar();
   if(id==="productos")    renderProductos();
   if(id==="proveedores")  renderProveedores();
   if(id==="ordenes")      renderOrdenes();
   if(id==="notas")        renderNotas();
   if(id==="inventario")   renderInventario();
   if(id==="resumenes")    renderResumenes();
+  if(id==="mercadopublico") renderMP();
   if(id==="usuarios")     renderUsuarios();
   if(id==="config")       renderConfig();
   if(id==="holding")      { /* ya renderizado al entrar */ }
@@ -698,40 +868,118 @@ function entrarComo(id){ $("emp-select").value=id; cambiarEmpresa(id); }
 /* ============================================================================
    INICIO (dashboard de la empresa activa)
 ============================================================================ */
+let INI_CHARTS={}, INI_DATA={};
+function iniFill(id, arr, ph){ const sel=$(id); if(!sel) return; const cur=sel.value; sel.innerHTML=`<option value="">${ph}</option>`+arr.map(x=>`<option value="${esc(x.id)}">${esc(x.nombre||"")}</option>`).join(""); sel.value=cur; }
+function iniDestroy(id){ if(INI_CHARTS[id]){ try{INI_CHARTS[id].destroy();}catch(_){} delete INI_CHARTS[id]; } }
+function iniBar(id,labels,data,color){ if(!window.Chart||!$(id)) return; iniDestroy(id);
+  INI_CHARTS[id]=new Chart($(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:color}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"$"+(v/1000|0)+"k"}}},maintainAspectRatio:false}}); }
+function iniLine(id,labels,data,color){ if(!window.Chart||!$(id)) return; iniDestroy(id);
+  INI_CHARTS[id]=new Chart($(id),{type:'line',data:{labels,datasets:[{data,borderColor:color,backgroundColor:color,tension:.25,fill:false}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"$"+(v/1000|0)+"k"}}},maintainAspectRatio:false}}); }
+function iniDoughnut(id,labels,data){ if(!window.Chart||!$(id)) return; iniDestroy(id);
+  INI_CHARTS[id]=new Chart($(id),{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:['#e8b923','#16a34a','#c0392b']}]},options:{maintainAspectRatio:false}}); }
 async function renderInicio(){
   $("ini-emp").textContent = MT.empresa ? MT.empresa.nombre : "";
-  try{
-    const [cli, cot] = await Promise.all([
-      tSel("clientes","select=id"),
-      tSel("cotizaciones","select=id,estado")
-    ]);
-    const ap = cot.filter(c=>c.estado==="aprobada").length;
-    $("ini-kpi").innerHTML = kpi(cli.length,"Clientes") + kpi(cot.length,"Cotizaciones") + kpi(ap,"Aprobadas");
-  }catch(e){ $("ini-kpi").innerHTML = `<div class="muted">No se pudo cargar (${esc(e.message)})</div>`; }
+  let cli=[],cot=[],np=[],prov=[];
+  try{ [cli,cot,np,prov]=await Promise.all([
+      tSel("clientes","select=id,nombre,rut"),
+      tSel("cotizaciones","select=*"),
+      tSel("notas_pedido","select=*"),
+      tSel("proveedores","select=id,nombre") ]);
+  }catch(e){ $("ini-kpi").innerHTML=`<div class="muted">No se pudo cargar (${esc(e.message)})</div>`; return; }
+  iniFill("ini-cliente", cli, "Todos los clientes"); iniFill("ini-prov", prov, "Todos los proveedores");
+  const d1=$("ini-desde")?$("ini-desde").value:"", d2=$("ini-hasta")?$("ini-hasta").value:"", fcli=$("ini-cliente")?$("ini-cliente").value:"", fprov=$("ini-prov")?$("ini-prov").value:"";
+  const inRange=f=>{ f=(f||"").slice(0,10); return (!d1||f>=d1)&&(!d2||f<=d2); };
+  const cliMap={}; cli.forEach(c=>cliMap[c.id]=c);
+  const cliq=($("ini-cliq")?$("ini-cliq").value:"").toLowerCase(); const qr=cleanRut(cliq);
+  const matchCli=id=>{ if(!cliq) return true; const c=cliMap[id]; if(!c) return false; return (c.nombre||"").toLowerCase().includes(cliq) || (c.rut||"").toLowerCase().includes(cliq) || (qr.length>=2 && cleanRut(c.rut).includes(qr)); };
+  const cots=cot.filter(c=> inRange(c.fecha||c.created_at) && (!fcli||c.cliente_id===fcli) && matchCli(c.cliente_id));
+  const notas=np.filter(n=> inRange(n.created_at) && (!fprov||n.proveedor_id===fprov));
+  const aprob=cots.filter(c=>c.estado==="aprobada");
+  const ventas=aprob.reduce((a,c)=>a+cotizTotal(c),0);
+  const compras=notas.reduce((a,n)=>a+(Number(n.total)||0),0);
+  const ganancia=aprob.reduce((a,c)=>a+(cotizNeto(c)-cotizCosto(c)),0);
+  $("ini-kpi").innerHTML = kpi(cli.length,"Clientes")+kpi(cots.length,"Cotizaciones")+kpi(aprob.length,"Aprobadas")+kpi(money(ventas),"Ventas")+kpi(money(compras),"Compras")+kpi(money(ganancia),"Ganancia");
+  const mes=f=>(f||"").slice(0,7);
+  const vM={}, gM={}, cM={}, est={pendiente:0,aprobada:0,rechazada:0};
+  cots.forEach(c=>{ if(c.estado in est) est[c.estado]++; else est.pendiente++; });
+  aprob.forEach(c=>{ const m=mes(c.fecha||c.created_at)||"—"; vM[m]=(vM[m]||0)+cotizTotal(c); gM[m]=(gM[m]||0)+(cotizNeto(c)-cotizCosto(c)); });
+  notas.forEach(n=>{ const m=mes(n.created_at)||"—"; cM[m]=(cM[m]||0)+(Number(n.total)||0); });
+  const meses=[...new Set([...Object.keys(vM),...Object.keys(cM),...Object.keys(gM)])].filter(x=>x&&x!=="—").sort();
+  iniBar("ch-ventas", meses, meses.map(m=>vM[m]||0), "#16a34a");
+  iniBar("ch-compras", meses, meses.map(m=>cM[m]||0), "#e8871e");
+  iniLine("ch-ganancia", meses, meses.map(m=>gM[m]||0), "#2563eb");
+  iniDoughnut("ch-estado", ["Pendiente","Aprobada","Rechazada"], [est.pendiente,est.aprobada,est.rechazada]);
+  INI_DATA={emp:$("ini-emp").textContent, k:{cli:cli.length,cot:cots.length,ap:aprob.length,ventas,compras,ganancia}, meses, vM, cM, gM, d1, d2};
 }
+async function exportInicioPDF(){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader(); const d=INI_DATA;
+  const y=await pdfHeader(doc,H,"RESUMEN",["Fecha: "+hoy(),(d.d1||d.d2)?("Periodo: "+(d.d1||"…")+" a "+(d.d2||"…")):""].filter(Boolean));
+  const k=d.k||{};
+  doc.autoTable({startY:y+2, head:[["Indicador","Valor"]], styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]},
+    body:[["Clientes",k.cli],["Cotizaciones",k.cot],["Aprobadas",k.ap],["Ventas",money(k.ventas)],["Compras",money(k.compras)],["Ganancia",money(k.ganancia)]] });
+  let cy=doc.lastAutoTable.finalY+6;
+  for(const [cid,tit] of [["ch-ventas","Ventas por mes"],["ch-compras","Compras por mes"],["ch-ganancia","Ganancia por mes"],["ch-estado","Cotizaciones por estado"]]){
+    const cv=document.getElementById(cid); if(!cv) continue;
+    try{ const img=cv.toDataURL("image/png",1); if(cy>235){ doc.addPage(); cy=16; } doc.setFontSize(10); doc.setTextColor(22,50,79); doc.text(tit,14,cy); cy+=3; doc.addImage(img,"PNG",14,cy,95,48); cy+=54; }catch(_){}
+  }
+  pdfFooter(doc,H); doc.save("resumen-"+(d.emp||"empresa")+".pdf");
+}
+function exportInicioCSV(){ const d=INI_DATA; const rows=[["Mes","Ventas","Compras","Ganancia"]].concat((d.meses||[]).map(m=>[m,d.vM[m]||0,d.cM[m]||0,d.gM[m]||0]));
+  rows.push([]); rows.push(["Clientes",d.k.cli]); rows.push(["Cotizaciones",d.k.cot]); rows.push(["Aprobadas",d.k.ap]); rows.push(["Ventas total",d.k.ventas]); rows.push(["Compras total",d.k.compras]); rows.push(["Ganancia total",d.k.ganancia]);
+  descargaCSV(rows,"resumen-"+(d.emp||"empresa")+".csv"); }
 
 /* ============================================================================
    CLIENTES (módulo demo — patrón para todos los módulos de negocio)
 ============================================================================ */
+let CLI_CACHE=[];
+function csvRows(text){ const rows=[]; let row=[], cur="", q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else { if(ch=='"') q=true; else if(ch==','){ row.push(cur); cur=""; } else if(ch=='\n'){ row.push(cur); rows.push(row); row=[]; cur=""; } else if(ch!='\r') cur+=ch; } }
+  if(cur!==""||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(x=>(x||"").trim()!=="")); }
 async function renderClientes(){
-  try{
-    const list = await tSel("clientes","select=*&order=nombre");
-    $("cl-body").innerHTML = list.map(c=>`<tr>
-      <td>${esc(c.nombre)}</td><td>${esc(c.rut||"")}</td><td>${esc(c.telefono||"")}</td><td>${esc(c.email||"")}</td>
-      <td><button class="btn-red" onclick="delCliente('${c.id}')">✕</button></td></tr>`).join("")
-      || `<tr><td colspan="5" class="muted">Sin clientes en esta empresa.</td></tr>`;
-  }catch(e){ $("cl-body").innerHTML=`<tr><td colspan="5" class="muted">Error: ${esc(e.message)}</td></tr>`; }
+  const term=($("cl-q")?$("cl-q").value:"").toLowerCase();
+  try{ CLI_CACHE = await tSel("clientes","select=*&order=nombre"); }
+  catch(e){ $("cl-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const qr=cleanRut(term);
+  const list=CLI_CACHE.filter(c=>!term || (c.nombre||"").toLowerCase().includes(term) || (c.rut||"").toLowerCase().includes(term) || (qr.length>=2 && cleanRut(c.rut).includes(qr)));
+  $("cl-body").innerHTML = list.map(c=>`<tr>
+     <td>${esc(c.nombre)}</td><td>${esc(c.rut||"")}</td><td>${esc(c.telefono||"")}</td><td>${esc(c.email||"")}</td><td>${esc(c.direccion||"")}</td>
+     <td style="white-space:nowrap"><button class="btn-sec" onclick="editCliente('${c.id}')">Editar</button> <button class="btn-red" onclick="delCliente('${c.id}')">✕</button></td></tr>`).join("")
+     || `<tr><td colspan="6" class="muted">Sin clientes.</td></tr>`;
+  if($("cl-count")) $("cl-count").textContent=list.length+" clientes";
 }
-async function addCliente(){
+function editCliente(id){ const c=CLI_CACHE.find(x=>x.id===id); if(!c) return;
+  $("cl-id").value=c.id; $("cl-nombre").value=c.nombre||""; $("cl-rut").value=c.rut||""; $("cl-tel").value=c.telefono||""; $("cl-mail").value=c.email||""; $("cl-dir").value=c.direccion||""; $("cl-nombre").focus(); }
+function limpiarCliente(){ ["cl-id","cl-nombre","cl-rut","cl-tel","cl-mail","cl-dir"].forEach(id=>{ if($(id)) $(id).value=""; }); }
+async function guardarCliente(){
   const nombre=$("cl-nombre").value.trim(); if(!nombre){ alert("Nombre obligatorio"); return; }
-  try{
-    await tInsert("clientes", {nombre, rut:$("cl-rut").value.trim(), telefono:$("cl-tel").value.trim(), email:$("cl-mail").value.trim()});
-    $("cl-nombre").value=$("cl-rut").value=$("cl-tel").value=$("cl-mail").value="";
-    renderClientes();
-  }catch(e){ alert("No se pudo guardar: "+e.message); }
+  let rut=$("cl-rut").value.trim(); if(rut){ if(!validRut(rut)){ alert("RUT inválido (dígito verificador)."); return; } rut=formatRut(rut); }
+  const row={nombre, rut, telefono:$("cl-tel").value.trim(), email:$("cl-mail").value.trim(), direccion:$("cl-dir").value.trim()};
+  const id=$("cl-id").value;
+  try{ if(id){ await tUpdate("clientes", id, row); } else { await tInsert("clientes", row); }
+    limpiarCliente(); renderClientes(); }
+  catch(e){ alert("No se pudo guardar: "+e.message); }
 }
 async function delCliente(id){ if(!confirm("¿Eliminar cliente?")) return;
   try{ await tDelete("clientes", id); renderClientes(); }catch(e){ alert("No se pudo eliminar: "+e.message); } }
+function exportClientesCSV(){ descargaCSV([["Nombre","RUT","Telefono","Email","Direccion"]].concat((CLI_CACHE||[]).map(c=>[c.nombre||"",c.rut||"",c.telefono||"",c.email||"",c.direccion||""])),"clientes.csv"); }
+async function importClientesCSV(ev){
+  const file=ev.target.files[0]; if(!file) return; const text=await file.text(); ev.target.value="";
+  const rows=csvRows(text); if(!rows.length){ alert("CSV vacío."); return; }
+  let start=0; const h=rows[0].map(x=>(x||"").toLowerCase());
+  const idx={nombre:h.findIndex(x=>x.includes("nombre")), rut:h.findIndex(x=>x.includes("rut")), tel:h.findIndex(x=>x.includes("tel")), mail:h.findIndex(x=>x.includes("mail")||x.includes("correo")||x.includes("email")), dir:h.findIndex(x=>x.includes("dir"))};
+  if(idx.nombre>=0) start=1; else { idx.nombre=0; idx.rut=1; idx.tel=2; idx.mail=3; idx.dir=4; }
+  const g=(r,k)=>idx[k]>=0?((r[idx[k]]||"").trim()):"";
+  let ins=0, upd=0;
+  for(let i=start;i<rows.length;i++){ const r=rows[i]; const nombre=g(r,'nombre'); if(!nombre) continue;
+    const rut=g(r,'rut'); const row={nombre, rut, telefono:g(r,'tel'), email:g(r,'mail'), direccion:g(r,'dir')};
+    const ex=rut? CLI_CACHE.find(c=>cleanRut(c.rut)===cleanRut(rut) && cleanRut(rut)) : null;
+    try{ if(ex){ await tUpdate("clientes", ex.id, row); upd++; } else { await tInsert("clientes", row); ins++; } }catch(_){}
+  }
+  await renderClientes(); alert("Importación lista. Nuevos: "+ins+", actualizados: "+upd+".");
+}
 
 /* ============================================================================
    COTIZACIONES (portado de la v30 al modelo multiempresa)
@@ -779,14 +1027,20 @@ function renderCat(){
   const q=($("b-prq").value||"").toLowerCase(), cat=$("b-prcat").value;
   const list = CAT.filter(p => (!cat || p.categoria===cat) &&
     (!q || (p.nombre||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q) || (p.proveedor||"").toLowerCase().includes(q))).slice(0,200);
-  $("b-catlist").innerHTML = list.map(p=>`<div class="it">
-      <div><b>${esc(p.nombre||"")}</b><br><small>${esc(p.sku||"")}${p.proveedor?(" · "+esc(p.proveedor)):""} · costo ${money(p.costo)}</small></div>
-      <button class="btn-sec" onclick="addCatItem('${p.id}')">+ Agregar</button></div>`).join("")
+  $("b-catlist").innerHTML = list.map(p=>`<div class="it" style="display:flex;align-items:center;gap:10px;padding:6px 4px">
+      ${p.imagen
+        ? `<img src="${esc(p.imagen)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:0 0 auto;background:#f1f5f9;border:1px solid var(--linea)" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'ph-img'}))">`
+        : `<div style="width:56px;height:56px;border-radius:8px;flex:0 0 auto;background:#f1f5f9;border:1px solid var(--linea);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:18px">📦</div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;line-height:1.25">${esc(p.nombre||"")}</div>
+        <div class="mini" style="color:#64748b">${esc(p.sku||"")}${p.categoria?(" · "+esc(p.categoria)):""}${p.proveedor?(" · "+esc(p.proveedor)):""} · costo ${money(p.costo)}</div>
+      </div>
+      <button class="btn-sec" style="flex:0 0 auto" onclick="addCatItem('${p.id}')">+ Agregar</button></div>`).join("")
     || `<div class="muted" style="padding:10px">Sin productos en el catálogo de esta empresa. Usa "fuera de catálogo".</div>`;
 }
 function addCatItem(pid){
   const p = CAT.find(x=>x.id===pid); if(!p) return;
-  CURR.items.push({ productoId:p.id, nombre:p.nombre, sku:p.sku||"", proveedor:p.proveedor||"",
+  CURR.items.push({ productoId:p.id, nombre:p.nombre, sku:p.sku||"", proveedor:p.proveedor||"", categoria:p.categoria||"",
                     costo:Number(p.costo)||0, precioFijo:0, cantidad:1, detalle:"", imagen:p.imagen||"" });
   renderItems();
 }
@@ -794,8 +1048,10 @@ function addFueraItem(){
   const nombre=$("b-fc-nombre").value.trim(); if(!nombre){ alert("Nombre del producto"); return; }
   const costo=parseNum($("b-fc-costo").value), cant=Math.max(1, parseInt($("b-fc-cant").value)||1);
   CURR.items.push({ productoId:null, nombre, sku:"", proveedor:$("b-fc-prov").value.trim(),
-                    costo, precioFijo:0, cantidad:cant, detalle:"" });
+                    costo, precioFijo:0, cantidad:cant, detalle:"",
+                    link:($("b-fc-link")?$("b-fc-link").value.trim():""), imagen:($("b-fc-img")?$("b-fc-img").value.trim():"") });
   $("b-fc-nombre").value=$("b-fc-costo").value=$("b-fc-prov").value=""; $("b-fc-cant").value=1;
+  if($("b-fc-link")) $("b-fc-link").value=""; if($("b-fc-img")) $("b-fc-img").value="";
   renderItems();
 }
 
@@ -804,8 +1060,23 @@ function renderItems(){
   if(!CURR) return;
   CURR.pct = Number($("b-pct").value)||0; CURR.despacho = parseNum($("b-despacho").value); CURR.despMode = $("b-despmodo").value;
   if(!CURR.items.length){ $("b-items").innerHTML = `<div class="muted">Agrega productos del catálogo o "fuera de catálogo".</div>`; recalc(); return; }
-  const rows = CURR.items.map((it,i)=>{ const pu=qUnit(CURR,it); return `<tr>
-      <td>${esc(it.nombre)}<br><input placeholder="Detalle (opcional)" value="${esc(it.detalle||"")}" oninput="setItemDetalle(${i},this.value)" style="margin-top:3px;font-size:11px"></td>
+  const rows = CURR.items.map((it,i)=>{ const pu=qUnit(CURR,it); const img=itemImg(it); return `<tr>
+      <td>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:0 0 46px">
+            ${img?`<img src="${esc(img)}" onerror="this.style.display='none'" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--linea)">`:`<div style="width:46px;height:46px;border-radius:6px;border:1px dashed var(--linea);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9ca3af">🪑</div>`}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${esc(it.nombre)}</div>
+            <textarea placeholder="Detalle del producto (se muestra en el PDF)" oninput="setItemDetalle(${i},this.value)" rows="5" style="width:100%;margin-top:3px;font-size:11px;line-height:1.4;resize:vertical;min-height:96px">${esc(it.detalle||"")}</textarea>
+            <div style="display:flex;gap:4px;margin-top:3px">
+              <input placeholder="Link del producto (interno — el cliente NO lo ve)" value="${esc(it.link||"")}" oninput="setItemLink(${i},this.value)" style="flex:1;font-size:11px">
+              <button class="btn-sec" style="padding:2px 8px" onclick="buscarProdWeb(${i})" title="Buscar el producto en la web (imagen/link)">🔎 Buscar</button>
+            </div>
+            <input placeholder="URL de imagen (pega o usa Buscar) — sale en el PDF" value="${esc(it.imagen||"")}" oninput="setItemImagen(${i},this.value)" style="width:100%;font-size:11px;margin-top:3px">
+          </div>
+        </div>
+      </td>
       <td style="width:64px"><input type="number" min="1" value="${it.cantidad}" onchange="setItemCant(${i},this.value)"></td>
       <td style="width:110px"><input type="text" inputmode="decimal" value="${pu}" onchange="setItemPrecio(${i},this.value)" title="Precio neto unitario"></td>
       <td class="right" style="width:90px">${money(pu*it.cantidad)}</td>
@@ -815,7 +1086,17 @@ function renderItems(){
 }
 function setItemCant(i,v){ if(CURR.items[i]){ CURR.items[i].cantidad=Math.max(1,parseInt(v)||1); renderItems(); } }
 function setItemPrecio(i,v){ if(CURR.items[i]){ const n=parseNum(v); CURR.items[i].precioFijo=(n>0)?n:0; renderItems(); } }
-function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,200); }
+function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,400); }
+function setItemLink(i,v){ if(CURR.items[i]) CURR.items[i].link=(v||"").trim(); }
+function setItemImagen(i,v){ if(CURR.items[i]){ CURR.items[i].imagen=(v||"").trim(); renderItems(); } }
+// Búsqueda del producto en la web (imagen/link). Abre búsqueda de compras + imágenes.
+function buscarProdWeb(i){
+  const it=CURR.items[i]; if(!it) return;
+  const q=encodeURIComponent(((it.nombre||"")+" "+(it.detalle||"")).trim());
+  if(!q){ alert("La línea no tiene nombre para buscar."); return; }
+  window.open("https://www.google.com/search?tbm=shop&q="+q, "_blank");   // compras (precio/link)
+  window.open("https://www.google.com/search?tbm=isch&q="+q, "_blank");   // imágenes (copia la URL a «URL de imagen»)
+}
 function delItem(i){ CURR.items.splice(i,1); renderItems(); }
 function recalc(){
   if(!CURR) return;
@@ -869,7 +1150,7 @@ function collectQuote(){
   const manual=$("b-num").value.trim(); if(manual) CURR.numero=manual;
 }
 async function builderSave(){
-  if(!CURR.items.length){ alert("Agrega al menos un producto."); return; }
+  if(!CURR.items.length){ alert("Agrega al menos un producto."); return false; }
   await ensureCliente(false);                 // guarda/actualiza el cliente si hay nombre
   collectQuote();
   $("builder-status").textContent="Guardando…";
@@ -882,8 +1163,20 @@ async function builderSave(){
       data:{ total:t.total, neto:t.neto, iva:t.iva, despMode:CURR.despMode, firmaIdx:($("b-firma")?parseInt($("b-firma").value):0) } };
     if(CURR.id){ await tUpdate("cotizaciones", CURR.id, row); }
     else { const r=await tInsert("cotizaciones", row); const saved=Array.isArray(r)?r[0]:r; CURR.id=saved.id; }
-    $("b-num").value=CURR.numero; $("builder-status").textContent="Guardada: "+CURR.numero;
-  }catch(e){ $("builder-status").textContent=""; alert("No se pudo guardar: "+e.message); }
+    $("b-num").value=CURR.numero;
+    // Guardar también envía un respaldo interno por correo (vendedor + cotización)
+    respaldoInterno("guarda_cotizacion", { numero:CURR.numero, cliente:($("b-cli-nombre")?$("b-cli-nombre").value.trim():""), total:t.total });
+    $("builder-status").textContent="Guardada: "+CURR.numero+" · respaldo interno enviado";
+    return true;
+  }catch(e){ $("builder-status").textContent=""; alert("No se pudo guardar: "+e.message); return false; }
+}
+async function builderGuardar(){
+  const num=CURR&&CURR.numero;
+  const ok=await builderSave();
+  if(ok){
+    alert("✅ Cotización "+(CURR.numero||num||"")+" guardada"+((MT.config&&MT.config.apps_script_url)?" · respaldo interno enviado":"")+".");
+    nuevaCotiz();   // limpia el formato para una nueva cotización
+  }
 }
 function builderWhatsApp(){
   if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
@@ -893,6 +1186,44 @@ function builderWhatsApp(){
   const txt=`Cotización ${CURR.numero||""}%0A${lineas}%0ATOTAL: ${money(t.total)} (IVA incl.)`;
   window.open("https://wa.me/"+tel+"?text="+txt, "_blank");
 }
+async function builderEmail(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  await builderSave();
+  await builderPDF();
+  const to=$("b-cli-correo")?$("b-cli-correo").value.trim():"";
+  const t=quoteTotals(CURR);
+  const razon=(MT.config&&MT.config.razon_social)||(MT.empresa&&MT.empresa.nombre)||"";
+  const asunto="Cotización "+(CURR.numero||"")+" - "+razon;
+  const cuerpo="Estimado(a),\n\nAdjuntamos la cotización N° "+(CURR.numero||"")+" por un total de "+money(t.total)+" (IVA incluido).\n\nSaludos,\n"+razon;
+  window.open("mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo), "_blank");
+}
+async function marcarPostulada(cod){ try{ if(cod){ const q=await tSel("oportunidades","codigo=eq."+encodeURIComponent(cod)+"&select=id"); if(q&&q[0]) await tUpdate("oportunidades", q[0].id, {estado_int:"postulada"}); } }catch(_){} }
+async function builderMercadoPublico(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  await builderSave();
+  const cod=CURR.numero||""; const t=quoteTotals(CURR);
+  const url=(MT.config&&MT.config.apps_script_url)||"";
+  const payload={ codigo:cod, empresa:(MT.empresa&&MT.empresa.nombre)||"", rut:(MT.config&&MT.config.rut)||"",
+    total:t.total, neto:t.neto, iva:t.iva,
+    items:CURR.items.map(it=>({nombre:it.nombre, cantidad:it.cantidad, precio_unit:qUnit(CURR,it), costo:it.costo})) };
+  // 1) Publicar SIN salir del sistema: el CRM llama a tu backend (Apps Script)
+  if(url){
+    try{
+      const r=await fetch(url+(url.includes("?")?"&":"?")+"action=publicar", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
+      let j=null; try{ j=await r.json(); }catch(_){}
+      await marcarPostulada(cod);
+      if(j && (j.ok||j.publicado)){ alert("✅ Oferta publicada en Mercado Público para "+cod+" (vía integración)."); return; }
+      alert("Envié la orden de publicar al backend y marqué la oportunidad como postulada.\nSi tu Apps Script aún no implementa «action=publicar», hay que completarlo para publicar 100% sin salir del sistema.");
+      return;
+    }catch(e){ /* CORS o backend caído → fallback */ }
+  }
+  // 2) Fallback (sin backend): preparo todo y abro el portal para publicar con Clave Única
+  await builderPDF(); await marcarPostulada(cod);
+  window.open(mpUrl(cod), "_blank");
+  alert("Para publicar sin salir del sistema necesito tu Apps Script con «action=publicar» (o las credenciales de ChileCompra). Por ahora dejé el PDF listo y abrí el portal para publicar con tu Clave Única.");
+}
+async function delQuote(id){ if(!confirm("¿Eliminar esta cotización?")) return;
+  try{ await tDelete("cotizaciones", id); renderQuotes(); }catch(e){ alert("No se pudo eliminar: "+e.message); } }
 
 /* ----- Listado ----- */
 function badge(e){ const k=e==="aprobada"?"a":(e==="rechazada"?"r":"p"); return `<span class="est ${k}">${esc(e||"pendiente")}</span>`; }
@@ -907,7 +1238,10 @@ async function renderQuotes(){
     const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||"—", total=(x.data&&x.data.total)||0;
     const acc = `<button class="btn-sec" onclick="pdfQuote('${x.id}')">PDF</button> `
       + `<button class="btn-sec" onclick="editQuote('${x.id}')">Editar</button> `
-      + ((puedeAprobar() && x.estado==="pendiente") ? `<button class="btn-green" onclick="aprobar('${x.id}')">Aprobar</button> <button class="btn-red" onclick="rechazar('${x.id}')">Rechazar</button>` : "");
+      + `<button class="btn-sec" onclick="enviarQuoteCorreo('${x.id}')">✉ Correo</button> `
+      + `<button class="btn-blue" onclick="pasarAOC('${x.id}')">➡ OC</button> `
+      + ((puedeAprobar() && x.estado==="pendiente") ? `<button class="btn-green" onclick="aprobar('${x.id}')">Aprobar</button> <button class="btn-red" onclick="rechazar('${x.id}')">Rechazar</button> ` : "")
+      + `<button class="btn-red" onclick="delQuote('${x.id}')">✕</button>`;
     return `<tr><td>${esc(x.numero||"")}</td><td>${esc(x.fecha||"")}</td><td>${esc(cn)}</td><td>${esc(x.vendedor_name||"")}</td>
       <td class="right">${money(total)}</td><td>${badge(x.estado)}</td><td>${esc(x.oc_numero||"")}</td><td>${acc}</td></tr>`;
   }).join("") || `<tr><td colspan="8" class="muted">Sin cotizaciones en esta empresa.</td></tr>`;
@@ -936,6 +1270,52 @@ async function aprobar(id){
     alert("✅ Cotización aprobada y Orden de Compra "+num+" creada. Revisa el módulo «Órdenes de compra».");
   }
   catch(e){ alert("No se pudo aprobar: "+e.message); }
+}
+/* --- Secuencia: Cotización → Orden de compra (desde el listado) --- */
+async function pasarAOC(id){
+  const q=await fetchQuote(id); if(!q){ alert("No se encontró la cotización."); return; }
+  if(!(q.items&&q.items.length)){ alert("La cotización no tiene productos."); return; }
+  let num=q.oc_numero;
+  if(!num){ try{ num=await siguienteNumero("orden_compra","OC"); }catch(_){ num="OC-"+(q.numero||Date.now()); } }
+  try{
+    await tUpdate("cotizaciones", id, { estado:(q.estado==="rechazada"?"rechazada":"aprobada"), oc_numero:num, aprobada_fecha:q.aprobada_fecha||hoy() });
+    await crearOCdesdeCotiz(Object.assign({}, q, {oc_numero:num}), num);
+    if($("cot-body")) renderQuotes();
+    alert("➡ Orden de compra "+num+" generada desde "+(q.numero||"la cotización")+".\nDesde «Órdenes de compra» podrás pasarla a Nota de pedido.");
+    go("ordenes");
+  }catch(e){ alert("No se pudo pasar a Orden de compra: "+e.message); }
+}
+async function enviarQuoteCorreo(id){
+  const q=await fetchQuote(id); if(!q){ alert("No se encontró la cotización."); return; }
+  const cli=(CLIENTES||[]).find(c=>c.id===q.cliente_id)||{};
+  const to=((cli.email||cli.correo||"")+"").trim();
+  const qobj={ items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct",
+               numero:q.numero, fecha:q.fecha, obs:q.obs, firmaIdx:(q.data&&q.data.firmaIdx) };
+  const t=quoteTotals(qobj);
+  const razon=(MT.config&&MT.config.razon_social)||(MT.empresa&&MT.empresa.nombre)||"";
+  const asunto="Cotización "+(q.numero||"")+" - "+razon;
+  const cuerpo="Estimado(a) "+(cli.nombre||"")+",\n\nAdjuntamos la cotización N° "+(q.numero||"")+" por un total de "+money(t.total)+" (IVA incluido).\n\nSaludos,\n"+razon;
+  // Genera el PDF (con productos, imágenes, valores y fechas) para adjuntarlo
+  let pdf64=""; try{ pdf64=await pdfCotizacion(qobj, cli, "b64", qobj.firmaIdx); }catch(_){}
+  const items=(q.items||[]).map(it=>{ const pu=qUnit(qobj,it); const c=Number(it.cantidad)||1;
+    return { nombre:it.nombre, cantidad:c, precio:pu, total:pu*c, detalle:it.detalle||"" }; });
+  const url=(MT.config&&MT.config.apps_script_url)||"";
+  if(url){
+    try{
+      const r=await fetch(url+(url.includes("?")?"&":"?")+"action=correo", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({ to, asunto, cuerpo, numero:q.numero||"", fecha:q.fecha||"",
+          empresa:(MT.empresa&&MT.empresa.nombre)||"", vendedor:(q.vendedor_name||(MT.perfil&&MT.perfil.nombre)||""),
+          cliente:{ nombre:cli.nombre||"", rut:cli.rut||"", email:to, telefono:cli.telefono||"", direccion:cli.direccion||"" },
+          items, neto:t.neto, iva:t.iva, total:t.total,
+          pdf_base64:pdf64, pdf_nombre:(q.numero||"cotizacion")+".pdf" })});
+      let j=null; try{ j=await r.json(); }catch(_){}
+      respaldoInterno("envia_cotizacion_correo", {numero:q.numero||"", to, total:t.total});
+      if(j && (j.ok||j.enviado)){ alert("✉ Cotización "+(q.numero||"")+" enviada a "+(to||"el cliente")+" con PDF adjunto."); return; }
+      alert("Orden de envío mandada al backend (respaldo interno registrado). Si tu Apps Script aún no implementa «action=correo», complétalo para el envío directo."); return;
+    }catch(_){}
+  }
+  if(!to){ alert("El cliente no tiene correo registrado."); return; }
+  window.open("mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo), "_blank");
 }
 async function rechazar(id){
   if(!puedeAprobar()) return;
@@ -991,7 +1371,9 @@ async function pdfCotizacion(q, cli, out, firmaIdx){
   y+=3;
   const imgs={}; for(const it of (q.items||[])){ const u=itemImg(it); if(u && imgs[u]===undefined){ imgs[u]=await cargarImagen(u); } }
   const conFoto=(q.items||[]).some(it=>imgs[itemImg(it)]);
-  const body=(q.items||[]).map(it=>{ const p=qUnit(q,it); const nom=it.nombre+((it.detalle&&it.detalle.trim())?("\n"+it.detalle.trim()):"");
+  const body=(q.items||[]).map(it=>{ const p=qUnit(q,it);
+    const desc=[ (it.detalle&&it.detalle.trim())?it.detalle.trim():"", [it.sku,it.categoria,it.proveedor].filter(Boolean).join(" · ") ].filter(Boolean).join("\n");
+    const nom=it.nombre+(desc?("\n"+desc):"");
     return conFoto ? ["", nom, it.cantidad, money(p), money(p*it.cantidad)] : [nom, it.cantidad, money(p), money(p*it.cantidad)]; });
   const head = conFoto ? [["Foto","Producto","Cant.","Precio neto","Total"]] : [["Producto","Cant.","Precio neto","Total"]];
   const colStyles = conFoto ? {0:{cellWidth:20},2:{halign:"center",cellWidth:16},3:{halign:"right",cellWidth:30},4:{halign:"right",cellWidth:30}}
@@ -1017,7 +1399,9 @@ async function pdfCotizacion(q, cli, out, firmaIdx){
   doc.setFontSize(7.5); doc.setTextColor(90);
   doc.text(doc.splitTextToSize("Precios en CLP, netos + IVA ("+ivaPct()+"%). Presupuesto válido 15 días. Precios y stock sujetos a confirmación. Despacho a todo Chile (valor según destino).",182),14,ey);
   pdfFooter(doc,H);
-  if(out==="save") doc.save((q.numero||"cotizacion")+".pdf"); else doc.output("dataurlnewwindow");
+  if(out==="save") doc.save((q.numero||"cotizacion")+".pdf");
+  else if(out==="b64"){ const u=doc.output("datauristring"); return (u.split(",")[1]||u); }
+  else doc.output("dataurlnewwindow");
 }
 async function builderPDF(){
   if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
@@ -1269,7 +1653,7 @@ async function guardarConfig(){
 /* ============================================================================
    ÓRDENES DE COMPRA  (nacen al aprobar una cotización)
 ============================================================================ */
-let OC_EDIT=null, NOTA_SRC=null;
+let OC_EDIT=null, NOTA_SRC=null, EDIT_NOTA=null;
 async function crearOCdesdeCotiz(q, num){
   const qq={items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct"};
   const t=quoteTotals(qq);
@@ -1284,13 +1668,17 @@ async function crearOCdesdeCotiz(q, num){
 async function renderOrdenes(){
   const term=($("oc-q")?$("oc-q").value:"").toLowerCase();
   let list; try{ list=await tSel("ordenes_compra","select=*&order=created_at.desc"); }catch(e){ $("oc-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  let notaMap={}; try{ (await tSel("notas_pedido","select=numero,oc_id")).forEach(n=>{ if(n.oc_id) notaMap[n.oc_id]=n.numero; }); }catch(_){}
   list=list.filter(o=>!term || (o.numero||"").toLowerCase().includes(term) || (o.cliente_nombre||"").toLowerCase().includes(term));
   $("oc-body").innerHTML=list.map(o=>`<tr>
-      <td>${esc(o.numero||"")}</td><td>${esc((o.data&&o.data.cotiz_numero)||"")}</td><td>${esc(o.cliente_nombre||"—")}</td>
+      <td>${esc(o.numero||"")}</td>
+      <td><span class="mini">${esc((o.data&&o.data.cotiz_numero)||"—")} ➜ <b>${esc(o.numero||"")}</b> ➜ ${notaMap[o.id]?('<b style="color:var(--verde)">'+esc(notaMap[o.id])+'</b>'):'<span style="color:#94a3b8">Nota pend.</span>'}</span></td>
+      <td>${esc(o.cliente_nombre||"—")}</td>
       <td class="right">${money(o.total)}</td><td>${badge(o.estado)}</td>
       <td><button class="btn-sec" onclick="editOC('${o.id}')">Editar</button>
           <button class="btn-sec" onclick="abrirGenerarNota('${o.id}')">Nota pedido</button>
           <button class="btn-sec" onclick="pdfOC('${o.id}')">PDF</button>
+          <button class="btn-blue" onclick="pdfSecuencia('${o.id}')">📑 Secuencia PDF</button>
           <button class="btn-red" onclick="delOC('${o.id}')">✕</button></td></tr>`).join("")
     || `<tr><td colspan="6" class="muted">Aún no hay órdenes de compra. Se crean al aprobar una cotización.</td></tr>`;
 }
@@ -1324,25 +1712,103 @@ async function pdfDocOC(o){
   doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Subtotal",money(neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(neto+iva)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
   pdfFooter(doc,H); doc.save((o.numero||"OC")+".pdf");
 }
+/* --- Respaldo interno: envía por correo (vía Apps Script) lo que hace el vendedor --- */
+function respaldoInterno(accion, extra){
+  const url=(MT.config&&MT.config.apps_script_url)||""; if(!url) return Promise.resolve();
+  const payload=Object.assign({ accion, vendedor:(MT.perfil&&MT.perfil.nombre)||(MT.user&&MT.user.email)||"",
+    empresa:(MT.empresa&&MT.empresa.nombre)||"", emails:(MT.config&&MT.config.emails)||"", ts:new Date().toISOString() }, extra||{});
+  return fetch(url+(url.includes("?")?"&":"?")+"action=respaldo", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)}).catch(()=>{});
+}
+/* --- PDF ÚNICO de la secuencia: Cotización + Orden de compra + Nota de pedido --- */
+async function pdfSecuencia(ocId){
+  const oc=await fetchOC(ocId); if(!oc){ alert("No se encontró la orden de compra."); return; }
+  let q=null; if(oc.cotizacion_id){ try{ q=await fetchQuote(oc.cotizacion_id); }catch(_){} }
+  let nota=null; try{ const ns=await tSel("notas_pedido","oc_id=eq."+oc.id+"&select=*"); nota=ns&&ns[0]; }catch(_){}
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  let y=await pdfHeader(doc, H, "SECUENCIA DE PEDIDO", ["Fecha: "+hoy()]);
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(30);
+  doc.text("Cliente: "+(oc.cliente_nombre||"—"),14,y);
+  doc.text("Trazabilidad:  "+((oc.data&&oc.data.cotiz_numero)||"—")+"  ➜  "+(oc.numero||"—")+"  ➜  "+((nota&&nota.numero)||"(sin nota)"),14,y+5);
+  y+=12;
+  const sec=(n,txt)=>{ if(y>250){ doc.addPage(); y=20; } doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.setTextColor(22,50,79); doc.text(n+") "+txt,14,y); };
+  const tabla=(head,body)=>{ doc.autoTable({startY:y+2,head:[head],body,styles:{fontSize:8},headStyles:{fillColor:[22,50,79]},columnStyles:{1:{halign:"center",cellWidth:16},2:{halign:"right",cellWidth:30},3:{halign:"right",cellWidth:30}}}); y=doc.lastAutoTable.finalY+8; };
+  // 1) Cotización
+  sec(1,"COTIZACIÓN "+((q&&q.numero)||(oc.data&&oc.data.cotiz_numero)||""));
+  if(q){ const qq={items:q.items||[],pct:Number(q.pct)||0,despacho:Number(q.despacho)||0,despMode:(q.data&&q.data.despMode)||"pct"};
+    tabla(["Producto","Cant.","Precio","Total"], (q.items||[]).map(it=>{ const c=Number(it.cantidad)||1, pv=qUnit(qq,it); return [it.nombre,c,money(pv),money(pv*c)]; }));
+  } else { doc.setFont(undefined,'normal'); doc.setFontSize(8); doc.setTextColor(90); doc.text("(cotización no disponible)",14,y+6); y+=12; }
+  // 2) Orden de compra
+  sec(2,"ORDEN DE COMPRA "+(oc.numero||""));
+  tabla(["Producto","Cant.","Precio venta","Total"], (oc.items||[]).map(it=>[it.nombre,it.cantidad,money(it.precio_venta),money((it.precio_venta||0)*it.cantidad)]));
+  // 3) Nota de pedido
+  sec(3,"NOTA DE PEDIDO "+((nota&&nota.numero)||"(pendiente)"));
+  if(nota){ tabla(["Producto","Cant.","Costo neto","Total"], (nota.items||[]).map(it=>[it.nombre,it.cantidad,money(it.costo),money((it.costo||0)*it.cantidad)])); }
+  else { doc.setFont(undefined,'normal'); doc.setFontSize(8); doc.setTextColor(90); doc.text("Aún no se ha generado la nota de pedido para esta orden.",14,y+6); }
+  pdfFooter(doc,H); doc.save("SECUENCIA-"+(oc.numero||"OC")+".pdf");
+}
+function provOptionsHTML(setOC){
+  const byName=new Set(PROV.map(p=>(p.nombre||"").toLowerCase()));
+  let opts = PROV.slice().sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||""))
+    .map(p=>`<option value="id:${p.id}">${esc(p.nombre)}</option>`);
+  (setOC||[]).forEach(n=>{ if(n && !byName.has(n.toLowerCase())) opts.push(`<option value="name:${esc(n)}">${esc(n)} (de la OC)</option>`); });
+  opts.push('<option value="__nuevo__">➕ Crear nuevo proveedor…</option>');
+  return opts.join("");
+}
+function notaProvChange(){ const v=$("nota-prov").value; $("nota-nuevo").classList.toggle("hidden", v!=="__nuevo__"); }
 function abrirGenerarNota(ocId){
-  fetchOC(ocId).then(o=>{ if(!o) return; NOTA_SRC=o;
+  fetchOC(ocId).then(o=>{ if(!o) return; NOTA_SRC=o; EDIT_NOTA=null;
     const setP=[...new Set((o.items||[]).map(it=>it.proveedor).filter(Boolean))];
-    $("nota-prov").innerHTML=['<option value="__all__">Todos los productos</option>'].concat(setP.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`)).join("");
-    $("dlg-nota").showModal();
+    $("nota-prov").innerHTML = provOptionsHTML(setP);
+    if(setP.length===1){ const m=PROV.find(p=>(p.nombre||"").toLowerCase()===setP[0].toLowerCase()); $("nota-prov").value = m?("id:"+m.id):("name:"+setP[0]); }
+    $("nota-items").innerHTML = ['<option value="__all__">Todos los productos</option>'].concat(setP.map(n=>`<option value="name:${esc(n)}">Solo de ${esc(n)}</option>`)).join("");
+    $("nota-items-wrap").classList.remove("hidden");
+    ["nota-nuevo-nombre","nota-nuevo-rut","nota-nuevo-email"].forEach(id=>{ if($(id)) $(id).value=""; });
+    notaProvChange(); $("dlg-nota").showModal();
   });
 }
+function editNotaProv(id){
+  fetchNota(id).then(n=>{ if(!n) return; EDIT_NOTA=n; NOTA_SRC=null;
+    $("nota-prov").innerHTML = provOptionsHTML([]);
+    if(n.proveedor_id){ $("nota-prov").value="id:"+n.proveedor_id; }
+    else if(n.proveedor_nombre){ const m=PROV.find(p=>(p.nombre||"").toLowerCase()===(n.proveedor_nombre||"").toLowerCase()); if(m) $("nota-prov").value="id:"+m.id; }
+    $("nota-items-wrap").classList.add("hidden");   // al editar solo se reasigna el proveedor
+    ["nota-nuevo-nombre","nota-nuevo-rut","nota-nuevo-email"].forEach(id2=>{ if($(id2)) $(id2).value=""; });
+    notaProvChange(); $("dlg-nota").showModal();
+  });
+}
+async function resolverProvNota(){
+  const v=$("nota-prov").value;
+  if(v==="__nuevo__"){
+    const nombre=($("nota-nuevo-nombre").value||"").trim(); if(!nombre){ alert("Ingresa el nombre del nuevo proveedor."); return null; }
+    try{ const r=await tInsert("proveedores", {nombre, rut:($("nota-nuevo-rut").value||"").trim(), email:($("nota-nuevo-email").value||"").trim()});
+      const saved=Array.isArray(r)?r[0]:r; PROV.push(saved); return {id:saved.id, nombre:saved.nombre}; }
+    catch(e){ alert("No se pudo crear el proveedor: "+e.message); return null; }
+  }
+  if(v.indexOf("id:")===0){ const p=PROV.find(x=>x.id===v.slice(3)); return p?{id:p.id, nombre:p.nombre}:null; }
+  if(v.indexOf("name:")===0){ const nm=v.slice(5); const p=PROV.find(x=>(x.nombre||"").toLowerCase()===nm.toLowerCase()); return {id:p?p.id:null, nombre:nm}; }
+  return null;
+}
 async function generarNotaPedido(){
-  if(!NOTA_SRC) return; const sel=$("nota-prov").value;
-  const items=(NOTA_SRC.items||[]).filter(it=> sel==="__all__" || (it.proveedor||"")===sel)
-     .map(it=>({nombre:it.nombre, sku:it.sku||"", cantidad:it.cantidad, costo:Number(it.costo)||0, total:(Number(it.costo)||0)*it.cantidad}));
-  if(!items.length){ alert("No hay productos para ese proveedor en la OC."); return; }
+  const prov=await resolverProvNota(); if(!prov) return;
+  if(EDIT_NOTA){
+    try{ await tUpdate("notas_pedido", EDIT_NOTA.id, {proveedor_id:prov.id||null, proveedor_nombre:prov.nombre});
+      $("dlg-nota").close(); EDIT_NOTA=null; alert("Proveedor de la nota actualizado a "+prov.nombre+"."); renderNotas(); }
+    catch(e){ alert("No se pudo actualizar: "+e.message); }
+    return;
+  }
+  if(!NOTA_SRC) return;
+  const filtro=$("nota-items")?$("nota-items").value:"__all__";
+  let items=(NOTA_SRC.items||[]);
+  if(filtro && filtro.indexOf("name:")===0){ const nm=filtro.slice(5); items=items.filter(it=>(it.proveedor||"")===nm); }
+  items=items.map(it=>({nombre:it.nombre, sku:it.sku||"", cantidad:it.cantidad, costo:Number(it.costo)||0, total:(Number(it.costo)||0)*it.cantidad}));
+  if(!items.length){ alert("No hay productos para incluir en la nota."); return; }
   const costo_neto=items.reduce((a,it)=>a+it.total,0), total=Math.round(costo_neto*(1+ivaPct()/100));
-  const provObj=PROV.find(p=>p.nombre===sel);
   try{
     const num=await siguienteNumero("nota_pedido","NP");
-    await tInsert("notas_pedido", { numero:num, proveedor_id:(provObj&&provObj.id)||null, proveedor_nombre:(sel==="__all__"?"(varios)":sel),
-       cotizacion_id:NOTA_SRC.cotizacion_id||null, oc_id:NOTA_SRC.id, items, costo_neto, total, estado:"pendiente", data:{} });
-    $("dlg-nota").close(); alert("🧾 Nota de pedido "+num+" creada."); go("notas");
+    await tInsert("notas_pedido", { numero:num, proveedor_id:prov.id||null, proveedor_nombre:prov.nombre,
+       cotizacion_id:NOTA_SRC.cotizacion_id||null, oc_id:NOTA_SRC.id, items, costo_neto, total, estado:"pendiente",
+       data:{ oc_numero:NOTA_SRC.numero||"", cotiz_numero:(NOTA_SRC.data&&NOTA_SRC.data.cotiz_numero)||"" } });
+    $("dlg-nota").close(); alert("🧾 Nota de pedido "+num+" creada para "+prov.nombre+"."); go("notas");
   }catch(e){ alert("No se pudo crear la nota: "+e.message); }
 }
 
@@ -1354,10 +1820,11 @@ async function renderNotas(){
   let list; try{ list=await tSel("notas_pedido","select=*&order=created_at.desc"); }catch(e){ $("np-body").innerHTML=`<tr><td colspan="7" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
   list=list.filter(n=>(!est||n.estado===est) && (!term || (n.numero||"").toLowerCase().includes(term) || (n.proveedor_nombre||"").toLowerCase().includes(term)));
   $("np-body").innerHTML=list.map(n=>`<tr>
-     <td>${esc(n.numero||"")}</td><td>${esc((n.created_at||"").slice(0,10))}</td><td>${esc(n.proveedor_nombre||"—")}</td>
+     <td>${esc(n.numero||"")}${(n.data&&(n.data.cotiz_numero||n.data.oc_numero))?`<div class="mini">${esc(n.data.cotiz_numero||"—")} ➜ ${esc(n.data.oc_numero||"—")} ➜ <b>${esc(n.numero||"")}</b></div>`:""}</td><td>${esc((n.created_at||"").slice(0,10))}</td><td>${esc(n.proveedor_nombre||"—")}</td>
      <td class="right">${money(n.costo_neto)}</td><td class="right">${money(n.total)}</td><td>${badge(n.estado)}</td>
      <td><select onchange="notaEstado('${n.id}',this.value)" style="font-size:11px">
         ${["pendiente","enviada","recibida"].map(s=>`<option value="${s}"${n.estado===s?" selected":""}>${s}</option>`).join("")}</select>
+        <button class="btn-sec" onclick="editNotaProv('${n.id}')">Editar</button>
         <button class="btn-sec" onclick="pdfNota('${n.id}')">PDF</button>
         <button class="btn-red" onclick="delNota('${n.id}')">✕</button></td></tr>`).join("")
     || `<tr><td colspan="7" class="muted">Aún no hay notas de pedido. Genérala desde una Orden de compra.</td></tr>`;
@@ -1415,7 +1882,37 @@ function resTab(t){ RES_TAB=t; document.querySelectorAll("#res-tabs button").for
 function pintarResumen(){
   const d1=$("res-desde")?$("res-desde").value:"", d2=$("res-hasta")?$("res-hasta").value:"";
   const cots=(RES_COTS||[]).filter(x=>{ const f=x.fecha||((x.created_at||"").slice(0,10)); return (!d1||f>=d1)&&(!d2||f<=d2); });
-  if(RES_TAB==="proveedor") resProveedor(cots); else if(RES_TAB==="mensual") resMensual(cots); else resVendedor(cots);
+  if(RES_TAB==="proveedor") resProveedor(cots); else if(RES_TAB==="mensual") resMensual(cots); else if(RES_TAB==="detalle") resDetalle(cots); else resVendedor(cots);
+}
+function resDetalle(cots){
+  const byId={}; (CLIENTES||[]).forEach(c=>byId[c.id]=c);
+  const rows=cots.slice().sort((a,b)=>((b.fecha||b.created_at||"")+"").localeCompare((a.fecha||a.created_at||"")+""));
+  $("res-head").innerHTML="<tr><th>Fecha</th><th>N°</th><th>Vendedor</th><th>Cliente</th><th>Estado</th><th class='right'>Monto</th></tr>";
+  $("res-body").innerHTML=rows.map(x=>{ const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||"—";
+    return `<tr><td>${esc(x.fecha||(x.created_at||"").slice(0,10))}</td><td>${esc(x.numero||"")}</td><td><b>${esc(x.vendedor_name||"—")}</b></td><td>${esc(cn)}</td><td>${badge(x.estado)}</td><td class="right">${money(cotizTotal(x))}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">Sin ventas en el rango.</td></tr>`;
+}
+/* --- Exportes del Resumen (leen la tabla visible: incluye el vendedor) --- */
+function resRows(){
+  const heads=[...document.querySelectorAll("#res-head th")].map(th=>th.textContent.trim());
+  const rows=[...document.querySelectorAll("#res-body tr")].map(tr=>[...tr.children].map(td=>td.textContent.trim())).filter(r=>r.length===heads.length);
+  return {heads, rows};
+}
+function resTitulo(){ return RES_TAB==='vendedor'?'POR VENDEDOR':RES_TAB==='detalle'?'DETALLE DE VENTAS':RES_TAB==='proveedor'?'POR PROVEEDOR':'MENSUAL'; }
+function exportResumenCSV(){
+  const {heads,rows}=resRows(); if(!rows.length){ alert("Nada que exportar en esta vista."); return; }
+  const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const csv=[heads.map(q).join(",")].concat(rows.map(r=>r.map(q).join(","))).join("\n");
+  const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="resumen-"+RES_TAB+"-"+hoy()+".csv"; a.click();
+}
+async function exportResumenPDF(){
+  const {heads,rows}=resRows(); if(!rows.length){ alert("Nada que exportar en esta vista."); return; }
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  const d1=$("res-desde")?$("res-desde").value:"", d2=$("res-hasta")?$("res-hasta").value:"";
+  const y=await pdfHeader(doc, H, "RESUMEN · "+resTitulo(), [ (d1||d2)?("Rango: "+(d1||"…")+" a "+(d2||"…")):("Fecha: "+hoy()) ]);
+  doc.autoTable({ startY:y+2, head:[heads], body:rows, styles:{fontSize:8}, headStyles:{fillColor:[22,50,79]} });
+  pdfFooter(doc,H); doc.save("resumen-"+RES_TAB+".pdf");
 }
 function resVendedor(cots){
   const g={}; cots.forEach(x=>{ const k=x.vendedor_name||"—"; g[k]=g[k]||{cotiz:0,monto:0,aprob:0,vendido:0};
@@ -1445,9 +1942,19 @@ function resMensual(cots){
 ============================================================================ */
 const ROLES_ASIG=["admin_empresa","supervisor","vendedor","solo_lectura"];
 function puedeUsuarios(){ return ["super_admin","admin_empresa"].includes(MT.rol); }
+function usEmpId(){ return ($("us-emp")&&$("us-emp").value) || (MT.empresa&&MT.empresa.id) || (EMPRESAS_DISP[0]&&EMPRESAS_DISP[0].id) || ""; }
+function usEmpNombre(){ const e=EMPRESAS_DISP.find(x=>x.id===usEmpId()); return (e&&e.nombre) || (MT.empresa&&MT.empresa.nombre) || "la empresa"; }
+function pobUsEmp(){ const s=$("us-emp"); if(!s) return; const cur=s.value;
+  s.innerHTML=(EMPRESAS_DISP||[]).map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("");
+  if(cur && EMPRESAS_DISP.some(e=>e.id===cur)) s.value=cur; else if(MT.empresa) s.value=MT.empresa.id;
+}
+function insMembresia(eid,row){ return rest("membresias", {method:"POST", headers:{...H(), Prefer:"return=representation"}, body:JSON.stringify({...row, empresa_id:eid})}); }
+function mbUpd(id,patch){ return rest("membresias?id=eq."+id+"&empresa_id=eq."+usEmpId(), {method:"PATCH", headers:{...H(), Prefer:"return=minimal"}, body:JSON.stringify(patch)}); }
 async function renderUsuarios(){
   if(!puedeUsuarios()){ if($("us-body")) $("us-body").innerHTML='<tr><td colspan="4" class="muted">Sin permiso.</td></tr>'; return; }
-  let list; try{ list=await rest("membresias?empresa_id=eq."+empId()+"&select=id,rol,activo,usuario_id,perfiles(nombre,email)&order=created_at"); }
+  pobUsEmp(); const eid=usEmpId();
+  if(!eid){ if($("us-body")) $("us-body").innerHTML='<tr><td colspan="4" class="muted">Elige una empresa.</td></tr>'; return; }
+  let list; try{ list=await rest("membresias?empresa_id=eq."+eid+"&select=id,rol,activo,usuario_id,perfiles(nombre,email)&order=created_at"); }
   catch(e){ $("us-body").innerHTML=`<tr><td colspan="4" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
   $("us-body").innerHTML=(list||[]).map(m=>{ const p=m.perfiles||{};
     return `<tr>
@@ -1456,20 +1963,21 @@ async function renderUsuarios(){
       <td><select onchange="usSetRol('${m.id}',this.value)" style="font-size:12px">${ROLES_ASIG.map(r=>`<option value="${r}"${m.rol===r?" selected":""}>${etiquetaRol(r)}</option>`).join("")}</select></td>
       <td><label class="mini" style="margin-right:8px"><input type="checkbox" ${m.activo?"checked":""} onchange="usActivo('${m.id}',this.checked)"> activo</label>
           <button class="btn-red" onclick="usQuitar('${m.id}')">Quitar</button></td></tr>`; }).join("")
-    || `<tr><td colspan="4" class="muted">Aún no hay usuarios asignados a esta empresa.</td></tr>`;
+    || `<tr><td colspan="4" class="muted">Aún no hay usuarios en ${esc(usEmpNombre())}.</td></tr>`;
 }
-async function usSetRol(id,r){ try{ await tUpdate("membresias", id, {rol:r}); }catch(e){ alert(e.message); } }
-async function usActivo(id,v){ try{ await tUpdate("membresias", id, {activo:v}); }catch(e){ alert(e.message); } }
-async function usQuitar(id){ if(!confirm("¿Quitar el acceso de este usuario a la empresa?")) return; try{ await tDelete("membresias", id); renderUsuarios(); }catch(e){ alert(e.message); } }
+async function usSetRol(id,r){ try{ await mbUpd(id,{rol:r}); }catch(e){ alert(e.message); } }
+async function usActivo(id,v){ try{ await mbUpd(id,{activo:v}); }catch(e){ alert(e.message); } }
+async function usQuitar(id){ if(!confirm("¿Quitar el acceso de este usuario a "+usEmpNombre()+"?")) return;
+  try{ await rest("membresias?id=eq."+id+"&empresa_id=eq."+usEmpId(), {method:"DELETE", headers:{...H(), Prefer:"return=minimal"}}); renderUsuarios(); }catch(e){ alert(e.message); } }
 async function usAgregarExistente(){
   const email=($("us-email2").value||"").trim().toLowerCase(); const rol=$("us-rol2").value;
   if(!email){ alert("Ingresa el correo."); return; }
   try{
     const p=await rest("perfiles?email=eq."+encodeURIComponent(email)+"&select=id,nombre");
-    if(!p || !p.length){ alert("No encontré un usuario con ese correo. Usa «Crear usuario», o pídele que se registre primero."); return; }
-    await tInsert("membresias", {usuario_id:p[0].id, rol, activo:true});
-    $("us-email2").value=""; renderUsuarios(); alert("Usuario agregado a la empresa.");
-  }catch(e){ alert("No se pudo agregar (¿ya estaba asignado?): "+e.message); }
+    if(!p || !p.length){ alert("No encontré un usuario con ese correo. Usa «Crear y asignar», o pídele que se registre primero."); return; }
+    await insMembresia(usEmpId(), {usuario_id:p[0].id, rol, activo:true});
+    $("us-email2").value=""; renderUsuarios(); alert("Usuario asignado a "+usEmpNombre()+" como "+etiquetaRol(rol)+".");
+  }catch(e){ alert("No se pudo asignar (¿ya estaba en esa empresa?): "+e.message); }
 }
 async function usCrear(){
   const email=($("us-email").value||"").trim().toLowerCase(); const pass=$("us-pass").value; const rol=$("us-rol").value;
@@ -1481,12 +1989,133 @@ async function usCrear(){
     const j=await r.json();
     if(!r.ok) throw new Error(j.msg||j.error_description||j.error||"No se pudo crear el usuario.");
     const uid=(j.user&&j.user.id)||j.id;
-    if(!uid) throw new Error("Usuario creado; si el proyecto exige confirmar correo, confírmalo y luego agrégalo por correo.");
+    if(!uid) throw new Error("Usuario creado; si el proyecto exige confirmar correo, confírmalo y luego asígnalo por correo.");
     await new Promise(res=>setTimeout(res,700));
-    await tInsert("membresias", {usuario_id:uid, rol, activo:true});
-    $("us-email").value=""; $("us-pass").value=""; $("us-msg").style.color="var(--verde,#16a34a)"; $("us-msg").textContent="✅ Usuario creado y asignado a "+((MT.empresa&&MT.empresa.nombre)||"la empresa")+".";
+    await insMembresia(usEmpId(), {usuario_id:uid, rol, activo:true});
+    $("us-email").value=""; $("us-pass").value=""; $("us-msg").style.color="var(--verde,#16a34a)"; $("us-msg").textContent="✅ Usuario creado y asignado a "+usEmpNombre()+" como "+etiquetaRol(rol)+".";
     renderUsuarios();
   }catch(e){ $("us-msg").style.color="var(--rojo,#dc2626)"; $("us-msg").textContent="Error: "+((e&&e.message)||e); }
+}
+
+/* ============================================================================
+   MERCADO PÚBLICO / COMPRA ÁGIL (oportunidades ChileCompra por empresa)
+============================================================================ */
+let MP_LIST=[]; const MP_ESTADOS=["pendiente","cotizada","postulada","ganada","perdida","descartada"];
+async function renderPorAprobar(){
+  const term=($("pa-q")?$("pa-q").value:"").toLowerCase();
+  let list; try{ list=await tSel("oportunidades","select=*&order=cierre.asc"); }catch(e){ $("pa-body").innerHTML=`<div class="muted">Error: ${esc(e.message)}</div>`; return; }
+  const rut=($("pa-rut")?$("pa-rut").value:"").toLowerCase(), reg=($("pa-region")?$("pa-region").value:"").toLowerCase();
+  list=list.filter(o=>['pendiente','cotizada'].includes(o.estado_int)
+    && !mpCerrada(o)   // no mostrar oportunidades ya cerradas
+    && (!term || (o.codigo||'').toLowerCase().includes(term) || (o.nombre||'').toLowerCase().includes(term) || (o.organismo||'').toLowerCase().includes(term))
+    && (!rut || (o.rut_organismo||'').toLowerCase().includes(rut))
+    && (!reg || (o.region||'').toLowerCase().includes(reg)));
+  if($("pa-count")) $("pa-count").textContent=list.length+" por aprobar";
+  $("pa-body").innerHTML = list.map(o=>`<div style="border:1px solid var(--linea);border-radius:10px;padding:12px;background:#fff">
+     <div class="mini" style="color:var(--azul);font-weight:700">${esc(o.codigo||"")}</div>
+     <div style="font-weight:700;margin:3px 0;font-size:13px">${esc((o.nombre||"").slice(0,90))}</div>
+     <div class="mini" style="margin-bottom:8px">Cierre: ${esc(o.cierre||"—")} · <span class="est ${o.estado_int==='cotizada'?'a':'p'}">${esc(o.estado_int)}</span></div>
+     <div style="display:flex;gap:6px;flex-wrap:wrap">
+       <button class="btn-sec" onclick="mpCrearCotiz('${o.id}')">✎ Cotizar</button>
+       <button class="btn-dark" onclick="paPostular('${o.id}')">Postular</button>
+       <button class="btn-gray" onclick="paDescartar('${o.id}')">Descartar</button>
+     </div></div>`).join("") || `<div class="muted" style="padding:10px">Nada por aprobar. Usa «Sincronizar» en Mercado Público para traer más.</div>`;
+}
+async function paDescartar(id){ if(!confirm("¿Descartar esta oportunidad?")) return; try{ await tUpdate("oportunidades", id, {estado_int:"descartada"}); renderPorAprobar(); }catch(e){ alert(e.message); } }
+async function paPostular(id){
+  const r=await tSel("oportunidades","id=eq."+id+"&select=codigo,nombre"); const o=r[0]||{}; const cod=o.codigo||"";
+  try{ await tUpdate("oportunidades", id, {estado_int:"postulada"}); }catch(_){}
+  await respaldoInterno("postula_compra_agil", {codigo:cod, nombre:o.nombre||""});
+  window.open(mpUrl(cod), "_blank");
+  renderPorAprobar();
+  alert("Marcada como postulada y respaldo interno enviado por correo (vendedor + oportunidad).\nCompleta la postulación final en el portal de ChileCompra con tu Clave Única.");
+}
+function mpTLabel(t){ return t==='licitacion'?'Licitación':(t==='convenio_marco'?'Convenio Marco':'Compra Ágil'); }
+function mpCerrada(o){ const f=(o.cierre||"").slice(0,10); return f && f < new Date().toISOString().slice(0,10); }
+async function renderMP(){
+  const term=($("mp-q")?$("mp-q").value:"").toLowerCase(); const est=$("mp-estado")?$("mp-estado").value:""; const tipo=$("mp-tipo")?$("mp-tipo").value:"";
+  const tlabel=mpTLabel;
+  try{ MP_LIST=await tSel("oportunidades","select=*&order=ts.desc"); }catch(e){ $("mp-body").innerHTML=`<tr><td colspan="7" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const d1=$("mp-desde")?$("mp-desde").value:"", d2=$("mp-hasta")?$("mp-hasta").value:"", orden=$("mp-orden")?$("mp-orden").value:"cierre_asc";
+  const verCerradas=$("mp-cerradas")&&$("mp-cerradas").checked;
+  let list=MP_LIST.filter(o=>{ const f=(o.cierre||"").slice(0,10);
+    return (!est||o.estado_int===est) && (!tipo||(o.tipo||'compra_agil')===tipo)
+      && (verCerradas || !mpCerrada(o))
+      && (!d1||f>=d1) && (!d2||f<=d2)
+      && (!term || (o.codigo||"").toLowerCase().includes(term) || (o.nombre||"").toLowerCase().includes(term)); });
+  list.sort((a,b)=>{ const A=(a.cierre||""), B=(b.cierre||""); return orden==='cierre_desc' ? B.localeCompare(A) : A.localeCompare(B); });
+  $("mp-body").innerHTML=list.map(o=>`<tr>
+     <td style="white-space:nowrap"><b>${esc(o.codigo||"")}</b></td>
+     <td style="white-space:nowrap"><span class="mini">${tlabel(o.tipo||'compra_agil')}</span></td>
+     <td>${esc((o.nombre||"").slice(0,100))}</td>
+     <td style="white-space:nowrap">${esc(o.cierre||"")}</td>
+     <td>${esc(o.estado||"")}</td>
+     <td><select onchange="mpEstado('${o.id}',this.value)" style="font-size:11px">${MP_ESTADOS.map(s=>`<option value="${s}"${o.estado_int===s?" selected":""}>${s}</option>`).join("")}</select></td>
+     <td style="white-space:nowrap">
+        <button class="btn-sec" onclick="mpBuscar('${esc((o.codigo||'').replace(/'/g,''))}')">Ficha</button>
+        <button class="btn-sec" onclick="mpCrearCotiz('${o.id}')">Cotizar</button>
+        <button class="btn-red" onclick="mpQuitar('${o.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">Sin oportunidades. Usa «Buscar / Sincronizar» para traerlas desde ChileCompra.</td></tr>`;
+  if($("mp-count")) $("mp-count").textContent=list.length+" oportunidades";
+}
+async function mpEstado(id,v){ try{ await tUpdate("oportunidades", id, {estado_int:v}); const o=MP_LIST.find(x=>x.id===id); if(o) o.estado_int=v; }catch(e){ alert(e.message); } }
+async function mpQuitar(id){ if(!confirm("¿Quitar esta oportunidad?")) return; try{ await tDelete("oportunidades", id); renderMP(); }catch(e){ alert(e.message); } }
+function mpUrl(cod){ if(!cod) return "https://www.mercadopublico.cl/"; return /-COT\d*/i.test(cod) ? ("https://compra-agil.mercadopublico.cl/resumen-cotizacion/"+encodeURIComponent(cod)) : ("https://www.mercadopublico.cl/Home/Busqueda?text="+encodeURIComponent(cod)); }
+function mpBuscar(codigo){ window.open(mpUrl(codigo), "_blank"); }
+async function mpCrearCotiz(id){
+  let o=MP_LIST.find(x=>x.id===id);
+  if(!o){ try{ const r=await tSel("oportunidades","id=eq."+id+"&select=*"); o=r&&r[0]; }catch(_){} }
+  if(!o){ alert("No se encontró la oportunidad."); return; }
+  go("cotizaciones"); nuevaCotiz();
+  const cfg=MT.config||{}, d=o.data||{};
+  const obs = cfg.obs_default || ("Plazo de entrega: según bases · Envío gratis"+(cfg.telefono?(" · Tel: "+cfg.telefono):"")+(cfg.emails?(" · Correo: "+cfg.emails):""));
+  // N° = código de la oportunidad
+  if($("b-num")) $("b-num").value = o.codigo||"";
+  // Cliente / institución + RUT + dirección de despacho (traídos de la oportunidad)
+  const dirDespacho = d.direccion_despacho || d.direccion_entrega || d.direccion || o.region || "";
+  if($("b-cli-nombre")) $("b-cli-nombre").value = o.organismo || "";
+  if($("b-cli-rut"))    $("b-cli-rut").value    = o.rut_organismo || "";
+  if($("b-cli-dir"))    $("b-cli-dir").value    = dirDespacho;
+  const c=$("b-cli-coment"); if(c) c.value = obs;
+  if($("cli-flag")) $("cli-flag").textContent = o.organismo ? ("Institución (Mercado Público): "+o.organismo) : "";
+  // Productos: desde data.items/productos; si no hay, usa el nombre de la oportunidad como línea editable
+  const src = Array.isArray(d.items)?d.items:(Array.isArray(d.productos)?d.productos:[]);
+  let items=[];
+  if(src.length){
+    items = src.map(it=>({ productoId:null, nombre:(it.nombre||it.descripcion||it.producto||"").toString(),
+      sku:(it.sku||it.codigo||"").toString(), proveedor:"", costo:Number(it.costo||0)||0,
+      precioFijo:Number(it.precio_unit||it.precio||0)||0, cantidad:Math.max(1,parseInt(it.cantidad||it.cant||1)||1),
+      detalle:(it.detalle||it.descripcion||"").toString(), imagen:it.imagen||"" }));
+  } else if(o.nombre){
+    items = [{ productoId:null, nombre:o.nombre, sku:"", proveedor:"", costo:0, precioFijo:0, cantidad:1, detalle:"", imagen:"" }];
+  }
+  if(CURR){ CURR.numero=o.codigo||""; CURR.obs=obs; CURR.oportunidad=o.codigo||""; CURR.clienteId=null; CURR.items=items; }
+  renderItems();
+  try{ await tUpdate("oportunidades", id, {estado_int:"cotizada"}); o.estado_int="cotizada"; }catch(_){}
+  respaldoInterno("cotiza_compra_agil", {codigo:o.codigo||"", nombre:o.nombre||"", organismo:o.organismo||""});
+  alert("Cotización "+(o.codigo||"")+" cargada desde Mercado Público con institución, RUT, dirección de despacho y producto(s).\nPuedes editar, agregar o eliminar líneas y ajustar costos; luego Guardar.");
+}
+async function mpSync(){
+  // La captura desde ChileCompra corre en el backend (Apps Script) por seguridad y por CORS:
+  // el Apps Script escribe las oportunidades en la base cada hora (trigger) o al ejecutar
+  // sincronizarAhora. Aquí sólo refrescamos desde la base — sin llamadas cross-origin.
+  const url=(MT.config&&MT.config.apps_script_url)||"";
+  if($("mp-count")) $("mp-count").textContent="Actualizando…";
+  // Nudge best-effort: pide al backend una captura fresca (no podemos leer la respuesta por CORS, no importa)
+  if(url){ try{ fetch(url+(url.includes("?")?"&":"?")+"action=oportunidades&t="+Date.now(), {method:"GET", mode:"no-cors", cache:"no-store"}); }catch(_){}
+    try{ fetch(url+(url.includes("?")?"&":"?")+"action=sync&t="+Date.now(), {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:"{}"}); }catch(_){} }
+  try{
+    await renderMP();
+    const n=(MP_LIST||[]).length;
+    alert("Actualizado desde la base: "+n+" oportunidades.\nLa captura desde ChileCompra corre automáticamente cada hora en el backend (o ejecuta «sincronizarAhora» en Apps Script para traerlas al instante).");
+  }catch(e){ if($("mp-count"))$("mp-count").textContent=""; alert("No se pudo actualizar: "+((e&&e.message)||e)); }
+}
+async function mpLimpiarCerradas(){
+  const cerradas=(MP_LIST||[]).filter(mpCerrada);
+  if(!cerradas.length){ alert("No hay oportunidades cerradas para limpiar."); return; }
+  if(!confirm("Se eliminarán "+cerradas.length+" oportunidades ya cerradas para aligerar el sistema. ¿Continuar?")) return;
+  let n=0; for(const o of cerradas){ try{ await tDelete("oportunidades", o.id); n++; }catch(_){} }
+  await renderMP(); alert("Limpieza lista. Eliminadas: "+n+".");
 }
 </script>
 </body>

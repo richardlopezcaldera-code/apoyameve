@@ -1,26 +1,21 @@
-# App lista para publicar (proyecto de prueba)
+# Carpeta publicada (Cloudflare)
 
-`index.html` de esta carpeta ya viene **configurado** apuntando al proyecto de
-prueba `crm-multiempresa` (URL + publishable key incluidas). Solo hay que subirlo.
+`index.html` de esta carpeta es **lo que se publica** en
+https://crm-multiempresa.mobiliariostechchile.workers.dev
 
-## Publicar en Cloudflare Pages (link `*.pages.dev`)
-1. Descarga este `index.html` (botón *Download raw file* en GitHub).
-2. dash.cloudflare.com → **Workers & Pages → Create → Pages → Upload assets**.
-3. Sube el `index.html`, nómbralo (ej. `crm-multiempresa`) y **Deploy**.
-4. Abre el link `https://<algo>.pages.dev`.
+## IMPORTANTE — no editar aquí
+Este archivo es una **copia** de `../index.html` (la versión de trabajo).
+Si editas solo `../index.html`, los cambios **no se publican** hasta copiarlos aquí.
+
+Para publicar cambios:
+1. Edita `crm-multiempresa/app/index.html`.
+2. Copia ese archivo sobre `crm-multiempresa/app/deploy/index.html`.
+3. Sube ambos: Cloudflare redespliega solo.
 
 ## Entrar
 - Usuario: `richardlopezcaldera@gmail.com`
 - Clave: `CrmHolding2026!`
-- Verás el **Panel Holding** con KAMIANA y MobiliarioTech.
 
-## Si el login diera error de "API key"
-Algunos proyectos usan la anon key clásica (JWT). Cópiala desde
-**Supabase → Project Settings → API → Project API keys → `anon` `public`**,
-abre la consola (F12) y ejecuta una vez, luego recarga:
-```js
-localStorage.setItem('SUPA_ANON','PEGA_AQUI_TU_ANON_KEY'); location.reload()
-```
-
-> Nota: esta carpeta `deploy/` contiene la key pública del proyecto para tu
-> comodidad. No pongas aquí la clave de la base de datos ni claves privadas.
+## Configuración
+Apunta al proyecto Supabase de prueba (`awdgvtfchubneruyqman`) con la
+publishable key (pública por diseño; los datos los protege RLS).
