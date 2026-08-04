@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Multiempresa</title>
+<!--
+  App shell MULTIEMPRESA (referencia) — implementa el §7 del BLUEPRINT_ENTERPRISE.
+  Demuestra, funcionando de punta a punta contra el esquema de ../db:
+    - Login real con Supabase Auth (JWT, no anon key para los datos)
+    - Carga de perfil + membresías del usuario
+    - Empresa activa (auto si es una, selector si son varias)
+    - Panel Holding para super admin (ve TODAS las empresas: v_resumen_empresas)
+    - Capa de datos aislada por empresa_id (RLS del lado del servidor)
+    - Numeración por empresa vía RPC siguiente_numero
+  Los módulos de la v30 (cotizaciones, productos, Mercado Público, etc.) se
+  pegan en las secciones marcadas con  «SLOT: ...»  y usan los helpers
+  tSel / tInsert / tUpdate / tDelete (ver más abajo). Guía: docs/INTEGRACION_APP.md
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--nav:#16324f;--nav2:#1f4468;--acc:#e8871e;--acc2:#cf7715;--azul:#2563eb;--verde:#16a34a;--gris:#eef1f5;--linea:#e2e8f0;--txt:#1f2937;--rojo:#c0392b;--oro:#c9962b;}
+*{box-sizing:border-box;font-family:'Segoe UI',Roboto,Arial,sans-serif;}
+body{margin:0;background:var(--gris);color:var(--txt);}
+button{cursor:pointer;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;}
+.btn{background:var(--acc);color:#fff;} .btn:hover{background:var(--acc2);}
+.btn-dark{background:var(--nav);color:#fff;} .btn-blue{background:var(--azul);color:#fff;}
+.btn-green{background:var(--verde);color:#fff;} .btn-sec{background:#fff;color:var(--nav);border:1px solid var(--nav);}
+.btn-red{background:var(--rojo);color:#fff;} .btn-gray{background:#64748b;color:#fff;}
+input,select,textarea{padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;width:100%;background:#fff;}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:13px;}
+th,td{border:1px solid var(--linea);padding:7px 8px;text-align:left;}
+th{background:var(--nav);color:#fff;} tr:nth-child(even){background:#f9fafb;}
+.hidden{display:none!important;}
+.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;}
+.row{display:flex;gap:12px;flex-wrap:wrap;} .row>div{flex:1;min-width:180px;}
+/* Login */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#12283f,#1f4468);}
+#login .box{background:#fff;padding:34px;border-radius:16px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,.35);}
+#login h1{font-size:20px;margin:0 0 4px;color:var(--nav);} #login p{text-align:center;color:#64748b;margin:0 0 20px;font-size:13px;}
+#login label{font-size:12px;color:#475569;font-weight:600;}
+/* App */
+#app{display:none;} header.top{background:var(--nav);color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+header .brand{font-weight:800;font-size:18px;} header .brand small{font-weight:400;opacity:.8;font-size:12px;}
+.empbar{background:var(--nav2);color:#fff;padding:8px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;}
+.empbar select{width:auto;min-width:220px;} .badge{background:var(--oro);color:#111;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;}
+nav#nav{background:#fff;border-bottom:1px solid var(--linea);padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;}
+nav#nav button{background:#fff;color:var(--nav);border:1px solid var(--linea);} nav#nav button.active{background:var(--acc);color:#fff;border-color:var(--acc);}
+main{padding:18px;max-width:1100px;margin:0 auto;} .section{display:none;} .section.active{display:block;}
+h2{color:var(--nav);margin-top:0;}
+.kpi{display:flex;gap:14px;flex-wrap:wrap;} .kpi .box{background:#fff;border-radius:12px;padding:16px;flex:1;min-width:150px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.kpi .box b{display:block;font-size:26px;color:var(--nav);} .kpi .box span{font-size:12px;color:#64748b;}
+.muted{color:#64748b;font-size:12px;}
+/* Cotizaciones */
+.searchbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+.builder{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch;}
+.panel{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.panel h3{color:var(--nav);margin:0 0 8px;}
+.catlist{max-height:48vh;min-height:220px;overflow:auto;border:1px solid var(--linea);border-radius:8px;}
+.catlist .it{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-bottom:1px solid #f1f5f9;align-items:center;}
+.catlist .it small{color:#64748b;}
+.cli-wrap{position:relative;}
+.cli-results{position:absolute;z-index:5;background:#fff;border:1px solid var(--linea);border-radius:8px;width:100%;max-height:200px;overflow:auto;box-shadow:0 6px 20px rgba(0,0,0,.12);}
+.cli-results div{padding:6px 8px;cursor:pointer;font-size:13px;} .cli-results div:hover{background:#f1f5f9;}
+.mini{font-size:11px;color:#64748b;font-weight:400;}
+.est{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;}
+.est.p{background:#64748b;} .est.a{background:var(--verde);} .est.r{background:var(--rojo);}
+.right{text-align:right;} .big{font-weight:800;font-size:15px;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media(max-width:960px){.builder{grid-template-columns:1fr;}}
+
+/* ===================== TEMA GLOBAL v2 — Arquitectura 3 columnas + tipografía geométrica ===================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--font:'Inter','Segoe UI',Roboto,system-ui,sans-serif;--sombra:0 1px 3px rgba(16,42,67,.06),0 1px 2px rgba(16,42,67,.04);--sombra2:0 4px 16px rgba(16,42,67,.08);}
+*{font-family:var(--font);}
+body{-webkit-font-smoothing:antialiased;letter-spacing:-.005em;}
+/* Números financieros con cifras tabulares para lectura de un vistazo */
+.kpi .box b,.big,.right,table td,.mono-num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;}
+/* Jerarquía de títulos: sección en mayúsculas negrita con espaciado amplio */
+h2{font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:17px;display:flex;align-items:center;gap:8px;}
+.panel h3,h3{font-weight:600;letter-spacing:-.01em;}
+.col-title{font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:#94a3b8;margin:0 0 10px;}
+/* KPIs de gran tamaño */
+.kpi{gap:12px;} .kpi .box{padding:16px 18px;border:1px solid var(--linea);box-shadow:var(--sombra);border-radius:14px;}
+.kpi .box b{font-size:30px;font-weight:700;line-height:1.1;letter-spacing:-.02em;} .kpi .box span{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8;}
+/* Tarjetas y superficies más limpias en alta resolución */
+.card{border:1px solid var(--linea);box-shadow:var(--sombra);border-radius:14px;}
+.panel{border:1px solid var(--linea);box-shadow:var(--sombra);border-radius:14px;}
+/* Más ancho para pantallas de alta resolución */
+main{max-width:1360px;padding:22px;}
+/* Navegación superior más nítida */
+nav#nav{padding:8px 14px;gap:8px;box-shadow:var(--sombra);}
+nav#nav button{border-radius:9px;font-weight:600;padding:8px 13px;transition:all .12s;}
+nav#nav button:hover{background:#f1f5f9;} nav#nav button.active{box-shadow:0 2px 8px rgba(232,135,30,.3);}
+header.top .brand{letter-spacing:-.02em;}
+/* Tablas legibles */
+th{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:9px 10px;}
+td{padding:9px 10px;}
+/* ---- Sistema de rejilla de 3 columnas (Operativa | Transaccional | Analítica) ---- */
+.grid-3{display:grid;grid-template-columns:0.95fr 1.25fr 0.95fr;gap:16px;align-items:start;}
+.grid-3 .col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+/* Tablet / notebook: 2 columnas + la operativa como panel lateral colapsable */
+@media(max-width:1180px){
+  .grid-3{grid-template-columns:1.2fr 0.9fr;}
+  .grid-3 .col-operativa{grid-column:1 / -1;order:-1;}
+  .grid-3 .col-operativa .card,.grid-3 .col-operativa .panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+}
+/* Móvil: una sola columna */
+@media(max-width:760px){
+  .grid-3{grid-template-columns:1fr;}
+  .grid-3 .col-operativa .card,.grid-3 .col-operativa .panel{display:block;}
+  main{padding:14px;} .kpi .box b{font-size:26px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login">
+  <div class="box">
+    <h1>CRM Multiempresa</h1>
+    <p>Accede con tu correo y clave</p>
+    <label>Correo</label><input id="lg-email" type="email" placeholder="tucorreo@empresa.com">
+    <div style="height:10px"></div>
+    <label>Clave</label><input id="lg-pass" type="password" placeholder="clave" onkeydown="if(event.key==='Enter')doLogin()">
+    <div style="height:16px"></div>
+    <button class="btn-dark" style="width:100%" onclick="doLogin()">Ingresar</button>
+    <p id="lg-err" style="color:var(--rojo);min-height:16px;margin-top:10px;text-align:left"></p>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app">
+  <header class="top">
+    <div class="brand">CRM <small>Multiempresa</small></div>
+    <div><span id="hdr-user" class="muted" style="color:#cbd5e1"></span>
+      <button class="btn-gray" onclick="logout()">Salir</button></div>
+  </header>
+
+  <!-- Barra de empresa activa / cambio de tenant -->
+  <div class="empbar">
+    <span>Empresa activa:</span>
+    <select id="emp-select" onchange="cambiarEmpresa(this.value)"></select>
+    <span id="emp-rol" class="badge"></span>
+    <button id="btn-holding" class="btn-sec hidden" onclick="go('holding')">🏢 Panel Holding</button>
+  </div>
+
+  <nav id="nav"></nav>
+
+  <main>
+    <!-- PANEL HOLDING (solo super admin) -->
+    <section id="s-holding" class="section">
+      <div class="card">
+        <h2>🏢 Panel Holding — todas las empresas</h2>
+        <p class="muted">Consolidado de la plataforma. Elige una empresa arriba para entrar a operar dentro de ella.</p>
+        <div class="kpi" id="holding-kpi"></div>
+        <div style="height:12px"></div>
+        <table><thead><tr><th>Empresa</th><th>Plan</th><th>Estado</th><th>Usuarios</th><th>Clientes</th><th>Cotizaciones</th><th>Aprobadas</th><th>Ventas aprobadas</th><th></th></tr></thead>
+        <tbody id="holding-body"></tbody></table>
+      </div>
+    </section>
+
+    <!-- INICIO / DASHBOARD de la empresa activa — arquitectura 3 columnas -->
+    <section id="s-inicio" class="section">
+      <h2 style="margin-bottom:14px">📊 Resumen · <span id="ini-emp"></span></h2>
+      <div class="grid-3">
+
+        <!-- IZQUIERDA · OPERATIVA -->
+        <div class="col col-operativa">
+          <div class="card">
+            <div class="col-title">Operativa · Filtros</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div><span class="mini">Desde</span><input type="date" id="ini-desde" onchange="renderInicio()"></div>
+              <div><span class="mini">Hasta</span><input type="date" id="ini-hasta" onchange="renderInicio()"></div>
+              <div><span class="mini">Cliente</span><input id="ini-cliq" placeholder="🔍 Nombre o RUT" oninput="renderInicio()"></div>
+              <select id="ini-cliente" onchange="renderInicio()"><option value="">Todos los clientes</option></select>
+              <select id="ini-prov" onchange="renderInicio()"><option value="">Todos los proveedores</option></select>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:12px">
+              <button class="btn-sec" style="flex:1" onclick="exportInicioPDF()">📄 PDF</button>
+              <button class="btn-sec" style="flex:1" onclick="exportInicioCSV()">⬇ CSV</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CENTRO · TRANSACCIONAL -->
+        <div class="col col-transaccional">
+          <div class="card">
+            <div class="col-title">Transaccional · Indicadores</div>
+            <div class="kpi" id="ini-kpi"></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:2px 0 8px">💰 Ventas por mes</h3>
+            <div style="position:relative;height:200px"><canvas id="ch-ventas"></canvas></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:2px 0 8px">🛒 Compras por mes</h3>
+            <div style="position:relative;height:200px"><canvas id="ch-compras"></canvas></div>
+          </div>
+        </div>
+
+        <!-- DERECHA · ANALÍTICA -->
+        <div class="col col-analitica">
+          <div class="card">
+            <div class="col-title">Analítica</div>
+            <h3 style="margin:2px 0 8px">📈 Ganancia por mes</h3>
+            <div style="position:relative;height:190px"><canvas id="ch-ganancia"></canvas></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:2px 0 8px">📋 Cotizaciones por estado</h3>
+            <div style="position:relative;height:190px"><canvas id="ch-estado"></canvas></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- CLIENTES (módulo demo: prueba la capa de datos por empresa) -->
+    <section id="s-clientes" class="section">
+      <div class="card">
+        <h2>👤 Clientes</h2>
+        <div class="searchbar">
+          <input id="cl-q" placeholder="🔍 Buscar por RUT o nombre" oninput="renderClientes()">
+          <button class="btn-sec" onclick="$('cl-import').click()">Importar CSV</button>
+          <input type="file" id="cl-import" accept=".csv" class="hidden" onchange="importClientesCSV(event)">
+          <button class="btn-sec" onclick="exportClientesCSV()">Exportar CSV</button>
+          <span class="mini" id="cl-count"></span>
+        </div>
+        <div class="row" style="margin-top:8px;align-items:flex-end">
+          <input type="hidden" id="cl-id">
+          <div><label>Nombre *</label><input id="cl-nombre"></div>
+          <div><label>RUT</label><input id="cl-rut"></div>
+          <div><label>Teléfono</label><input id="cl-tel"></div>
+          <div><label>Email</label><input id="cl-mail"></div>
+          <div style="flex:1"><label>Dirección</label><input id="cl-dir"></div>
+          <div style="flex:0;min-width:auto;display:flex;gap:6px"><button class="btn-green" onclick="guardarCliente()">💾 Guardar</button><button class="btn-gray" onclick="limpiarCliente()">Limpiar</button></div>
+        </div>
+        <div style="height:12px"></div>
+        <div style="overflow:auto;max-height:56vh">
+          <table><thead><tr><th>Nombre</th><th>RUT</th><th>Teléfono</th><th>Email</th><th>Dirección</th><th></th></tr></thead>
+          <tbody id="cl-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- COTIZACIONES -->
+    <section id="s-cotizaciones" class="section">
+      <div class="searchbar" style="justify-content:space-between">
+        <div>
+          <button class="btn" onclick="showBuilder()">🧾 Nueva / Editar</button>
+          <button class="btn-sec" onclick="showListado()">📋 Listado</button>
+        </div>
+        <div class="mini" id="builder-status"></div>
+      </div>
+
+      <!-- Vista builder -->
+      <div id="view-builder" class="builder">
+        <!-- Izquierda: catálogo + fuera de catálogo -->
+        <div class="panel">
+          <h3>1) Productos del catálogo</h3>
+          <div class="row" style="margin-bottom:8px">
+            <input id="b-prq" placeholder="Buscar producto, SKU o proveedor…" oninput="renderCat()">
+            <select id="b-prcat" onchange="renderCat()" style="max-width:200px"><option value="">Todas las categorías</option></select>
+          </div>
+          <div class="catlist" id="b-catlist"></div>
+          <div style="margin-top:14px;border-top:1px dashed #cbd5e1;padding-top:10px">
+            <div class="mini" style="font-weight:700;color:var(--nav);font-size:13px">Producto fuera de catálogo</div>
+            <div class="mini">Ingresa el COSTO neto — el % de venta de la derecha define el precio.</div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-nombre" placeholder="Nombre del producto" style="flex:2">
+              <input type="text" inputmode="decimal" id="b-fc-costo" placeholder="Costo (ej. 33.580)" style="max-width:130px">
+              <input type="number" id="b-fc-cant" value="1" min="1" style="max-width:70px">
+            </div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-link" placeholder="Link web (de dónde cotizaste) — solo interno, el cliente NO lo ve" style="flex:2">
+              <input id="b-fc-prov" placeholder="Proveedor (opcional)">
+            </div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-img" placeholder="URL de imagen (opcional) — sale en el PDF" style="flex:2">
+              <button class="btn" style="flex:0;white-space:nowrap" onclick="addFueraItem()">+ Agregar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Derecha: cliente + cotización -->
+        <div class="panel">
+          <h3>2) Cliente</h3>
+          <div class="cli-wrap" style="margin-bottom:6px">
+            <div class="row">
+              <input id="b-cli-search" autocomplete="off" placeholder="Buscar por RUT o nombre" oninput="buscarClienteInline()" onfocus="buscarClienteInline()">
+              <button class="btn-sec" style="flex:0;white-space:nowrap" onclick="guardarClienteInline()">💾 Crear / Guardar</button>
+            </div>
+            <div id="cli-results" class="cli-results hidden"></div>
+          </div>
+          <div id="cli-flag" class="mini"></div>
+          <label>Nombre de la empresa o institución *</label>
+          <input id="b-cli-nombre">
+          <div class="row" style="margin-top:6px">
+            <div><label>RUT</label><input id="b-cli-rut" placeholder="77.777.777-7"></div>
+            <div><label>Correo</label><input id="b-cli-correo"></div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div><label>Teléfono</label><input id="b-cli-tel"></div>
+            <div><label>Dirección / Región</label><input id="b-cli-dir"></div>
+          </div>
+          <label style="margin-top:6px">Comentarios (visibles al cliente)</label>
+          <textarea id="b-cli-coment" rows="2"></textarea>
+
+          <h3 style="margin-top:14px">3) Cotización</h3>
+          <div class="row">
+            <div style="flex:2"><label>N° cotización <span class="mini">(vacío = automático)</span></label><input id="b-num" placeholder="Automático"></div>
+            <div><label>% de venta <span class="mini">no se muestra al cliente</span></label><input type="number" id="b-pct" min="0" oninput="renderItems()"></div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div style="flex:1"><label>Firma en el PDF</label><select id="b-firma"></select></div>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div style="flex:0;min-width:170px"><label>Despacho (neto)</label>
+              <input type="text" inputmode="decimal" id="b-despacho" value="0" oninput="recalc()">
+              <select id="b-despmodo" onchange="renderItems()" style="margin-top:6px">
+                <option value="pct">Repartir proporcional (%)</option>
+                <option value="lineal">Repartir igual por unidad</option>
+              </select>
+            </div>
+            <div style="align-self:flex-end"><span class="mini">se reparte dentro del precio (no sale como línea)</span></div>
+          </div>
+
+          <div id="b-items" style="margin-top:12px"></div>
+
+          <div style="margin-top:12px;border-top:1px solid var(--linea);padding-top:10px">
+            <table>
+              <tr><td>Subtotal (neto)</td><td class="right" id="b-sub">$0</td></tr>
+              <tr><td>IVA</td><td class="right" id="b-iva">$0</td></tr>
+              <tr><td class="big">TOTAL</td><td class="right big" id="b-total">$0</td></tr>
+            </table>
+          </div>
+
+          <div class="actions">
+            <button class="btn" onclick="builderPDF()">📄 Descargar PDF</button>
+            <button class="btn-dark" onclick="builderGuardar()">💾 Guardar</button>
+            <button class="btn-green" onclick="builderWhatsApp()">WhatsApp</button>
+            <button class="btn-dark" onclick="builderMercadoPublico()">🏛️ Publicar en Mercado Público</button>
+            <button class="btn-gray" onclick="nuevaCotiz()">Limpiar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vista listado -->
+      <div id="view-list" class="card hidden">
+        <div class="searchbar"><input id="cot-q" placeholder="🔍 Buscar por N°, cliente o estado" oninput="renderQuotes()"></div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th><th class="right">Total</th><th>Estado</th><th>OC</th><th>Acciones</th></tr></thead>
+          <tbody id="cot-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTOS -->
+    <section id="s-productos" class="section">
+      <div class="card">
+        <h2>📦 Productos (catálogo)</h2>
+        <div class="searchbar">
+          <input id="pr-q" placeholder="Buscar producto, categoría, proveedor o SKU" oninput="renderProductos()">
+          <button class="btn-dark" onclick="openProducto()">+ Agregar</button>
+          <button class="btn" id="pr-save" onclick="guardarCambiosProd()" style="display:none"></button>
+          <button class="btn-gray" id="pr-undo" onclick="descartarCambiosProd()" style="display:none">Descartar</button>
+          <button class="btn-sec" onclick="$('pr-import').click()">Importar CSV</button>
+          <input type="file" id="pr-import" accept=".csv" class="hidden" onchange="importProductosCSV(event)">
+          <button class="btn-sec" onclick="exportProductosCSV()">Exportar CSV</button>
+          <span class="mini" id="pr-count"></span>
+        </div>
+        <p class="mini">Edición en línea: cambia categoría, costo, precio o proveedor y presiona <b>💾 Guardar cambios</b>. "Precio" en 0 = se calcula con el % de venta. Importar CSV <b>agrega</b> (no borra lo existente).</p>
+        <div style="overflow:auto;max-height:60vh">
+          <table><thead><tr><th>Nombre</th><th>SKU</th><th>Categoría</th><th class="right">Costo</th><th class="right">Precio</th><th>Proveedor</th><th></th></tr></thead>
+          <tbody id="pr-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROVEEDORES -->
+    <section id="s-proveedores" class="section">
+      <div class="card">
+        <h2>🏭 Proveedores</h2>
+        <div class="searchbar">
+          <input id="pv-q" placeholder="🔍 Buscar proveedor" oninput="renderProveedores()">
+          <button class="btn-dark" onclick="openProveedor()">+ Agregar</button>
+        </div>
+        <div style="overflow:auto;max-height:60vh">
+          <table><thead><tr><th>Nombre</th><th>RUT</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th></th></tr></thead>
+          <tbody id="pv-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- INVENTARIO -->
+    <section id="s-inventario" class="section">
+      <div class="card">
+        <h2>📦 Inventario</h2>
+        <div class="searchbar">
+          <input id="inv-q" placeholder="🔍 Buscar producto, categoría o proveedor" oninput="renderInventario()">
+          <span class="mini">Umbral bajo</span><input type="number" id="inv-umbral" value="5" style="max-width:80px" onchange="renderInventario()">
+          <button class="btn-sec" onclick="exportInventarioCSV()">Exportar CSV</button>
+          <span class="mini" id="inv-count"></span>
+        </div>
+        <p class="mini">Edita el <b>stock</b> y el <b>mínimo</b> por producto (se guarda al instante). Estado: sin stock / bajo / ok.</p>
+        <div style="overflow:auto;max-height:64vh">
+          <table><thead><tr><th>Producto</th><th>Categoría</th><th>Proveedor</th><th>Stock</th><th>Mínimo</th><th>Estado</th></tr></thead>
+          <tbody id="inv-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESÚMENES -->
+    <section id="s-resumenes" class="section">
+      <div class="card">
+        <h2>📈 Resúmenes</h2>
+        <div id="res-tabs" class="searchbar">
+          <button class="btn-sec active" data-t="vendedor" onclick="resTab('vendedor')">Por vendedor</button>
+          <button class="btn-sec" data-t="detalle" onclick="resTab('detalle')">Detalle de ventas</button>
+          <button class="btn-sec" data-t="proveedor" onclick="resTab('proveedor')">Por proveedor</button>
+          <button class="btn-sec" data-t="mensual" onclick="resTab('mensual')">Mensual</button>
+          <span class="mini">Desde</span><input type="date" id="res-desde" onchange="pintarResumen()">
+          <span class="mini">Hasta</span><input type="date" id="res-hasta" onchange="pintarResumen()">
+          <button class="btn-sec" onclick="exportResumenPDF()">📄 PDF</button>
+          <button class="btn-sec" onclick="exportResumenCSV()">⬇ Excel (CSV)</button>
+        </div>
+        <div style="overflow:auto;max-height:64vh">
+          <table><thead id="res-head"></thead><tbody id="res-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- POR APROBAR (Compra Ágil) -->
+    <section id="s-poraprobar" class="section">
+      <div class="card">
+        <h2>✅ Por aprobar — Compra Ágil</h2>
+        <p class="mini">Oportunidades listas para revisar y postular. «Cotizar» crea la cotización con el código de la oportunidad; «Postular» abre ChileCompra y la marca como postulada.</p>
+        <div class="searchbar">
+          <input id="pa-q" placeholder="🔍 Institución, código/ID o ítem" oninput="renderPorAprobar()">
+          <input id="pa-rut" placeholder="RUT institución" oninput="renderPorAprobar()" style="max-width:150px">
+          <input id="pa-region" placeholder="Región" oninput="renderPorAprobar()" style="max-width:150px">
+          <span class="mini" id="pa-count"></span>
+        </div>
+        <div id="pa-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;max-height:64vh;overflow:auto;margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- MERCADO PÚBLICO / COMPRA ÁGIL -->
+    <section id="s-mercadopublico" class="section">
+      <div class="card">
+        <h2>🏛️ Mercado Público / Compra Ágil</h2>
+        <p class="mini">Oportunidades de ChileCompra por empresa. Marca el estado, abre la ficha o crea una cotización desde una oportunidad. «Sincronizar» trae nuevas desde tu Apps Script.</p>
+        <div class="searchbar">
+          <input id="mp-q" placeholder="🔍 Palabra clave (código, organismo o ítem)" oninput="renderMP()">
+          <select id="mp-tipo" onchange="renderMP()"><option value="">Todos los tipos</option><option value="compra_agil">Compra Ágil</option><option value="licitacion">Licitaciones</option><option value="convenio_marco">Convenio Marco</option></select>
+          <select id="mp-estado" onchange="renderMP()"><option value="">Todos</option><option value="pendiente">pendiente</option><option value="cotizada">cotizada</option><option value="ganada">ganada</option><option value="perdida">perdida</option><option value="descartada">descartada</option></select>
+          <span class="mini">Cierre</span><input type="date" id="mp-desde" onchange="renderMP()" title="Cierre desde">
+          <input type="date" id="mp-hasta" onchange="renderMP()" title="Cierre hasta">
+          <select id="mp-orden" onchange="renderMP()"><option value="cierre_asc">Cierre ↑ (próximos)</option><option value="cierre_desc">Cierre ↓</option></select>
+          <label class="mini" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="mp-cerradas" onchange="renderMP()" style="width:auto"> ver cerradas</label>
+          <button class="btn-sec" onclick="mpSync()">🔄 Sincronizar</button>
+          <button class="btn-red" onclick="mpLimpiarCerradas()" title="Borra las oportunidades ya cerradas para aligerar el sistema">🧹 Limpiar cerradas</button>
+          <span class="mini" id="mp-count"></span>
+        </div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>Código</th><th>Tipo</th><th>Nombre</th><th>Cierre</th><th>Estado MP</th><th>Estado interno</th><th></th></tr></thead>
+          <tbody id="mp-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- USUARIOS -->
+    <section id="s-usuarios" class="section">
+      <div class="card">
+        <h2>👥 Usuarios y accesos</h2>
+        <p class="mini">Crea usuarios, elige <b>con qué empresa</b> trabajan y qué <b>privilegio</b> tienen. El <b>Administrador</b> ve costos y todo; el <b>Vendedor</b> solo cotiza. Se autentican con Supabase Auth.</p>
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:1"><label>🏢 Gestionar usuarios de la empresa</label><select id="us-emp" onchange="renderUsuarios()"></select></div>
+        </div>
+        <div class="row" style="align-items:flex-end;margin-top:8px">
+          <div style="flex:1"><label>Crear usuario — correo</label><input id="us-email" placeholder="persona@empresa.com"></div>
+          <div><label>Contraseña</label><input id="us-pass" type="text" placeholder="mín. 6"></div>
+          <div><label>Privilegio</label><select id="us-rol"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
+          <div><button class="btn-dark" onclick="usCrear()">+ Crear y asignar</button></div>
+        </div>
+        <div class="mini" id="us-msg" style="margin-top:4px"></div>
+        <div class="row" style="align-items:flex-end;margin-top:8px">
+          <div style="flex:1"><label>…o asignar un usuario ya registrado (por correo)</label><input id="us-email2" placeholder="correo existente"></div>
+          <div><label>Privilegio</label><select id="us-rol2"><option value="vendedor">Vendedor</option><option value="supervisor">Supervisor</option><option value="admin_empresa">Administrador</option><option value="solo_lectura">Solo lectura</option></select></div>
+          <div><button class="btn-sec" onclick="usAgregarExistente()">Asignar</button></div>
+        </div>
+        <div style="overflow:auto;max-height:52vh;margin-top:12px">
+          <table><thead><tr><th>Nombre</th><th>Correo</th><th>Privilegio</th><th>Acceso</th></tr></thead><tbody id="us-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONFIGURACIÓN -->
+    <section id="s-config" class="section">
+      <div class="card">
+        <h2>⚙️ Configuración de la empresa <span class="mini" id="cf-emp"></span></h2>
+        <p class="mini">Estos datos alimentan cotizaciones, PDF, IVA, % de venta e integraciones (correo, Mercado Público / Compra Ágil). Solo Administrador / Super Admin.</p>
+        <div class="row">
+          <div><label>Razón social</label><input id="cf-razon"></div>
+          <div><label>RUT</label><input id="cf-rut"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Dirección</label><input id="cf-direccion"></div>
+          <div><label>Teléfono</label><input id="cf-telefono"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Emails (separados por coma)</label><input id="cf-emails"></div>
+          <div><label>Sitio web</label><input id="cf-web"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Tienda</label><input id="cf-tienda"></div>
+          <div><label>Logo (URL)</label><input id="cf-logo"></div>
+        </div>
+        <h3 style="margin-top:14px">Ventas e impuestos</h3>
+        <div class="row">
+          <div><label>Moneda</label><input id="cf-moneda" placeholder="CLP"></div>
+          <div><label>IVA (%)</label><input id="cf-iva" type="number" step="0.1"></div>
+          <div><label>% de venta</label><input id="cf-pct" type="number" step="0.1"></div>
+        </div>
+        <h3 style="margin-top:14px">Integraciones</h3>
+        <div class="row">
+          <div style="flex:1"><label>Apps Script URL (envío de correo)</label><input id="cf-apps"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Mercado Público — ticket/API</label><input id="cf-mp"></div>
+          <div><label>Compra Ágil — ticket/API</label><input id="cf-ca"></div>
+        </div>
+        <h3 style="margin-top:14px">Datos bancarios <span class="mini">(uno por línea)</span></h3>
+        <textarea id="cf-bancos" rows="4" style="width:100%;font:inherit;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></textarea>
+        <h3 style="margin-top:14px">Firmas <span class="mini">(una por línea: Nombre | Cargo | Teléfono)</span></h3>
+        <textarea id="cf-firmas" rows="3" style="width:100%;font:inherit;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></textarea>
+        <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn-dark" onclick="guardarConfig()">💾 Guardar configuración</button>
+          <button class="btn-sec" onclick="renderConfig()">Deshacer cambios</button>
+          <span class="mini" id="cf-msg"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ÓRDENES DE COMPRA -->
+    <section id="s-ordenes" class="section">
+      <div class="card">
+        <h2>📄 Órdenes de compra</h2>
+        <p class="mini">Se crean al <b>aprobar</b> una cotización. Aquí puedes editar precios de venta y generar la Nota de Pedido al proveedor.</p>
+        <div class="searchbar"><input id="oc-q" placeholder="🔍 Buscar N° OC o cliente" oninput="renderOrdenes()"></div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>N° OC</th><th>Secuencia · Cot ➜ OC ➜ Nota</th><th>Cliente</th><th class="right">Total venta</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="oc-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- NOTAS DE PEDIDO -->
+    <section id="s-notas" class="section">
+      <div class="card">
+        <h2>🧾 Notas de pedido</h2>
+        <p class="mini">Pedido al proveedor (costos netos + IVA). Se generan desde una Orden de compra.</p>
+        <div class="searchbar">
+          <input id="np-q" placeholder="🔍 Buscar N° o proveedor" oninput="renderNotas()">
+          <select id="np-estado" onchange="renderNotas()"><option value="">Todos los estados</option><option value="pendiente">pendiente</option><option value="enviada">enviada</option><option value="recibida">recibida</option></select>
+        </div>
+        <div style="overflow:auto;max-height:62vh">
+          <table><thead><tr><th>N°</th><th>Fecha</th><th>Proveedor</th><th class="right">Costo neto</th><th class="right">Total c/IVA</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="np-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Diálogo editar Orden de Compra -->
+  <dialog id="dlg-oc" style="border:none;border-radius:14px;padding:0;width:min(660px,95vw)">
+    <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700">Editar Orden de Compra</div>
+    <div style="padding:18px">
+      <div class="row"><div><label>N° OC</label><input id="oc-e-num"></div><div><label>Cliente</label><input id="oc-e-cli" disabled></div></div>
+      <div style="overflow:auto;max-height:48vh;margin-top:10px">
+        <table><thead><tr><th>Producto</th><th class="right">Cant.</th><th>Precio venta</th><th class="right">Total</th></tr></thead><tbody id="oc-e-body"></tbody></table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+        <b>Total: <span id="oc-e-total">$0</span></b>
+        <div style="display:flex;gap:8px"><button class="btn-dark" onclick="guardarOC()">Guardar</button><button class="btn-gray" onclick="$('dlg-oc').close()">Cerrar</button></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Diálogo generar Nota de Pedido -->
+  <dialog id="dlg-nota" style="border:none;border-radius:14px;padding:0;width:min(480px,94vw)">
+    <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700">Generar Nota de Pedido</div>
+    <div style="padding:18px">
+      <label>Proveedor de la nota</label>
+      <select id="nota-prov" style="width:100%" onchange="notaProvChange()"></select>
+      <div id="nota-nuevo" class="hidden" style="margin-top:8px;border:1px dashed #cbd5e1;border-radius:8px;padding:10px">
+        <div class="mini" style="font-weight:700;color:var(--nav)">Nuevo proveedor</div>
+        <input id="nota-nuevo-nombre" placeholder="Nombre / razón social *" style="margin-top:4px">
+        <div class="row" style="margin-top:6px">
+          <input id="nota-nuevo-rut" placeholder="RUT (opcional)">
+          <input id="nota-nuevo-email" placeholder="Correo (opcional)">
+        </div>
+      </div>
+      <div id="nota-items-wrap">
+        <label style="margin-top:8px">Productos a incluir</label>
+        <select id="nota-items" style="width:100%"></select>
+      </div>
+      <p class="mini">Elige el proveedor destinatario (o crea uno nuevo) y qué productos de la OC incluir. Costo neto + IVA.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn-dark" onclick="generarNotaPedido()">Generar / Guardar</button><button class="btn-gray" onclick="$('dlg-nota').close()">Cancelar</button></div>
+    </div>
+  </dialog>
+
+  <!-- Diálogo alta/edición de proveedor -->
+  <dialog id="dlg-pv" style="border:none;border-radius:14px;padding:0;width:min(520px,94vw)">
+    <form method="dialog" style="margin:0">
+      <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700" id="dlg-pv-h">Nuevo proveedor</div>
+      <div style="padding:18px">
+        <input type="hidden" id="v-id">
+        <label>Nombre *</label><input id="v-nombre">
+        <div class="row" style="margin-top:6px">
+          <div><label>RUT</label><input id="v-rut"></div>
+          <div><label>Contacto</label><input id="v-contacto"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Teléfono</label><input id="v-tel"></div>
+          <div><label>Email</label><input id="v-email"></div>
+        </div>
+        <div class="actions" style="justify-content:flex-end">
+          <button class="btn-gray" value="cancel">Cancelar</button>
+          <button class="btn-green" value="ok" onclick="event.preventDefault();saveProveedor()">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Diálogo alta/edición de producto -->
+  <dialog id="dlg-pr" style="border:none;border-radius:14px;padding:0;width:min(560px,94vw)">
+    <form method="dialog" style="margin:0">
+      <div style="background:var(--nav);color:#fff;padding:12px 18px;border-radius:14px 14px 0 0;font-weight:700" id="dlg-pr-h">Nuevo producto</div>
+      <div style="padding:18px">
+        <input type="hidden" id="p-id">
+        <label>Nombre *</label><input id="p-nombre">
+        <div class="row" style="margin-top:6px">
+          <div><label>SKU</label><input id="p-sku"></div>
+          <div><label>Categoría</label><input id="p-cat"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Costo neto</label><input type="text" inputmode="decimal" id="p-costo"></div>
+          <div><label>Precio (0 = por %)</label><input type="text" inputmode="decimal" id="p-precio"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><label>Proveedor</label><input id="p-prov"></div>
+          <div><label>Imagen (URL)</label><input id="p-img"></div>
+        </div>
+        <div class="actions" style="justify-content:flex-end">
+          <button class="btn-gray" value="cancel">Cancelar</button>
+          <button class="btn-green" value="ok" onclick="event.preventDefault();saveProducto()">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+</div>
+
+<script>
+/* ============================================================================
+   CONFIGURACIÓN — completa con los datos de TU proyecto Supabase.
+   La anon key SOLO se usa como `apikey` y para el endpoint de login; el acceso
+   a los datos va autorizado con el JWT del usuario (RLS decide qué ve).
+============================================================================ */
+// La URL del proyecto es pública. La anon key NO se versiona (aunque es pública por
+// diseño, evitamos guardarla en el repo). Opciones para inyectarla al desplegar:
+//   a) reemplaza <<PEGA_TU_ANON_KEY>> por tu anon key en el archivo que publiques, o
+//   b) déjala y ejecútalo una vez en la consola del navegador:
+//        localStorage.setItem('SUPA_ANON','tu_anon_key')
+const SUPA_URL  = localStorage.getItem('SUPA_URL')  || "https://awdgvtfchubneruyqman.supabase.co";
+const SUPA_ANON = localStorage.getItem('SUPA_ANON') || "sb_publishable_KTsmIkFTml63zXHpMyTxJA_EH3K_w_Y";
+
+/* ===== Contexto multiempresa en memoria ===== */
+let MT = { token:null, user:null, perfil:null, superAdmin:false,
+           memberships:[], empresa:null, rol:null };
+let EMPRESAS_DISP = [];   // empresas que el admin puede gestionar/asignar
+
+/* ===== Capa REST: siempre con el JWT del usuario ===== */
+function H(){ return { apikey:SUPA_ANON, Authorization:"Bearer "+(MT.token||SUPA_ANON), "Content-Type":"application/json" }; }
+async function rest(path, opts){ const r = await fetch(SUPA_URL+"/rest/v1/"+path, {headers:H(), ...opts});
+  if(!r.ok){ throw new Error(await r.text()); }
+  return r.status===204 ? null : r.json(); }
+
+/* Helpers scoping por empresa activa. Los SELECT ya están aislados por RLS;
+   filtramos por empresa_id además por eficiencia. Los INSERT/UPDATE inyectan
+   empresa_id de la empresa activa. */
+function empId(){ if(!MT.empresa) throw new Error("No hay empresa activa"); return MT.empresa.id; }
+function tSel(table, extra){ return rest(table+"?empresa_id=eq."+empId()+(extra?("&"+extra):"&select=*")); }
+function tInsert(table, row){ return rest(table, {method:"POST",
+  headers:{...H(), Prefer:"return=representation"}, body:JSON.stringify({...row, empresa_id:empId()})}); }
+function tUpdate(table, id, patch){ return rest(table+"?id=eq."+id+"&empresa_id=eq."+empId(), {method:"PATCH",
+  headers:{...H(), Prefer:"return=minimal"}, body:JSON.stringify(patch)}); }
+function tDelete(table, id){ return rest(table+"?id=eq."+id+"&empresa_id=eq."+empId(),
+  {method:"DELETE", headers:{...H(), Prefer:"return=minimal"}}); }
+/* Numeración por empresa (COT-00001 por cada empresa) */
+function siguienteNumero(tipo, prefijo){ return rest("rpc/siguiente_numero", {method:"POST",
+  body:JSON.stringify({p_empresa:empId(), p_tipo:tipo||"cotizacion", p_prefijo:prefijo||"COT"})}); }
+
+const $ = id => document.getElementById(id);
+const money = n => "$" + Math.round(n||0).toLocaleString("es-CL");
+
+/* ============================================================================
+   LOGIN (Supabase Auth) + carga de contexto
+============================================================================ */
+async function doLogin(){
+  const email=$("lg-email").value.trim(), pass=$("lg-pass").value;
+  $("lg-err").style.color="#64748b"; $("lg-err").textContent="Verificando…";
+  try{
+    const r = await fetch(SUPA_URL+"/auth/v1/token?grant_type=password", {
+      method:"POST", headers:{apikey:SUPA_ANON,"Content-Type":"application/json"},
+      body: JSON.stringify({email, password:pass})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error_description || j.msg || "Correo o clave incorrectos.");
+    MT.token = j.access_token; MT.user = j.user;
+    await cargarContexto();
+    $("lg-err").textContent=""; $("login").style.display="none"; $("app").style.display="block";
+    $("hdr-user").textContent = (MT.perfil && MT.perfil.nombre) ? MT.perfil.nombre : MT.user.email;
+    iniciarSesionUI();
+  }catch(e){ $("lg-err").style.color="var(--rojo)"; $("lg-err").textContent = e.message || String(e); }
+}
+
+async function cargarContexto(){
+  const p = await rest("perfiles?id=eq."+MT.user.id+"&select=*");
+  MT.perfil = p[0] || null;
+  MT.superAdmin = !!(MT.perfil && MT.perfil.es_super_admin);
+  // membresías + nombre de empresa (join vía PostgREST)
+  MT.memberships = await rest("membresias?activo=eq.true&select=rol,empresa_id,empresas(id,nombre,slug,plan,estado)");
+}
+
+function iniciarSesionUI(){
+  // Opciones del selector de empresa
+  let empresas = [];
+  if(MT.superAdmin){
+    // El holding ve todas; las cargamos del consolidado.
+    $("btn-holding").classList.remove("hidden");
+    rest("v_resumen_empresas?select=*").then(rows=>{
+      empresas = rows.map(r=>({id:r.id, nombre:r.nombre, plan:r.plan, estado:r.estado}));
+      poblarSelectorEmpresas(empresas, true);
+      renderHolding(rows);
+      go("holding");
+    }).catch(err=>fatal(err));
+    return;
+  }
+  empresas = MT.memberships.map(m=>({id:m.empresas.id, nombre:m.empresas.nombre, plan:m.empresas.plan, estado:m.empresas.estado, rol:m.rol}));
+  if(empresas.length===0){ fatal(new Error("Tu usuario no tiene empresas asignadas. Pide a un administrador que te dé de alta.")); return; }
+  poblarSelectorEmpresas(empresas, false);
+  cambiarEmpresa(empresas[0].id);
+}
+
+function poblarSelectorEmpresas(empresas, esSuper){
+  EMPRESAS_DISP = (empresas||[]).slice();
+  const sel=$("emp-select"); sel.innerHTML="";
+  if(esSuper){ const o=document.createElement("option"); o.value=""; o.textContent="— elige una empresa —"; sel.appendChild(o); }
+  empresas.forEach(e=>{ const o=document.createElement("option"); o.value=e.id; o.textContent=e.nombre+(e.estado!=="activa"?" ("+e.estado+")":""); sel.appendChild(o); });
+  sel.disabled = empresas.length<=1 && !esSuper;
+}
+
+function rolDeEmpresa(id){
+  if(MT.superAdmin) return "super_admin";
+  const m = MT.memberships.find(x=>x.empresas.id===id);
+  return m ? m.rol : null;
+}
+
+async function cambiarEmpresa(id){
+  if(!id){ MT.empresa=null; return; }
+  const m = MT.memberships.find(x=>x.empresas.id===id);
+  MT.empresa = m ? {id:m.empresas.id, nombre:m.empresas.nombre} : {id, nombre:$("emp-select").selectedOptions[0].textContent};
+  MT.rol = rolDeEmpresa(id);
+  $("emp-select").value = id;
+  $("emp-rol").textContent = etiquetaRol(MT.rol);
+  CURR = null;                       // nueva empresa → limpiar builder
+  await cargarDatosEmpresa();        // config + catálogo + clientes de esta empresa
+  buildNav();
+  go("inicio");
+}
+
+/* Carga config, catálogo y clientes de la empresa activa (cachés en memoria) */
+async function cargarDatosEmpresa(){
+  try{ const e = await rest("empresas?id=eq."+empId()+"&select=nombre,rut,logo_url,config");
+       MT.empresaFull = e[0] || {}; MT.config = Object.assign({pct_venta:35, iva:19, moneda:"CLP"}, (e[0] && e[0].config) || {}); }
+  catch(_){ MT.empresaFull={}; MT.config={pct_venta:35, iva:19, moneda:"CLP"}; }
+  try{ CAT = await tSel("productos","select=*&deleted=eq.false&order=nombre"); }catch(_){ CAT=[]; }
+  try{ CLIENTES = await tSel("clientes","select=*&order=nombre"); }catch(_){ CLIENTES=[]; }
+  try{ PROV = await tSel("proveedores","select=*&order=nombre"); }catch(_){ PROV=[]; }
+  // categorías del catálogo para el filtro
+  const cats = [...new Set(CAT.map(p=>p.categoria).filter(Boolean))].sort();
+  const sel = $("b-prcat"); if(sel){ sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); }
+  fillFirmas();
+}
+
+function etiquetaRol(r){ return ({super_admin:"Super Admin", admin_empresa:"Administrador", supervisor:"Supervisor", vendedor:"Vendedor", solo_lectura:"Solo lectura"})[r] || r || "—"; }
+
+function logout(){ MT={token:null,user:null,perfil:null,superAdmin:false,memberships:[],empresa:null,rol:null};
+  $("app").style.display="none"; $("login").style.display="flex"; $("lg-email").value=""; $("lg-pass").value=""; }
+
+function fatal(err){ $("lg-err").style.color="var(--rojo)"; $("lg-err").textContent=(err&&err.message)||String(err);
+  $("app").style.display="none"; $("login").style.display="flex"; }
+
+/* ============================================================================
+   NAVEGACIÓN (menú según rol) — la barrera real es RLS, esto sólo ordena la UI
+============================================================================ */
+const MODULES = [
+  {id:"inicio",   label:"📊 Inicio",       roles:["super_admin","admin_empresa","supervisor","vendedor","solo_lectura"]},
+  {id:"clientes", label:"👤 Clientes",     roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"cotizaciones", label:"📋 Cotizaciones", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"poraprobar", label:"✅ Por aprobar", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"productos", label:"📦 Productos", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"proveedores", label:"🏭 Proveedores", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"ordenes", label:"📄 Órdenes de compra", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"notas", label:"🧾 Notas de pedido", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"inventario", label:"📦 Inventario", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"resumenes", label:"📈 Resúmenes", roles:["super_admin","admin_empresa","supervisor"]},
+  {id:"mercadopublico", label:"🏛️ Mercado Público", roles:["super_admin","admin_empresa","supervisor","vendedor"]},
+  {id:"usuarios", label:"👥 Usuarios", roles:["super_admin","admin_empresa"]},
+  {id:"config", label:"⚙️ Configuración", roles:["super_admin","admin_empresa"]},
+  // SLOT: añade aquí más módulos de la v30 con sus roles.
+];
+function buildNav(){
+  const nav=$("nav"); nav.innerHTML="";
+  MODULES.filter(m=>m.roles.includes(MT.rol)).forEach(m=>{
+    const b=document.createElement("button"); b.textContent=m.label; b.dataset.id=m.id; b.onclick=()=>go(m.id); nav.appendChild(b);
+  });
+}
+function go(id){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  const sec=$("s-"+id); if(sec) sec.classList.add("active");
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active", b.dataset.id===id));
+  if(id==="inicio")       renderInicio();
+  if(id==="clientes")     renderClientes();
+  if(id==="cotizaciones") { if(!CURR) nuevaCotiz(); else showBuilder(); }
+  if(id==="poraprobar")   renderPorAprobar();
+  if(id==="productos")    renderProductos();
+  if(id==="proveedores")  renderProveedores();
+  if(id==="ordenes")      renderOrdenes();
+  if(id==="notas")        renderNotas();
+  if(id==="inventario")   renderInventario();
+  if(id==="resumenes")    renderResumenes();
+  if(id==="mercadopublico") renderMP();
+  if(id==="usuarios")     renderUsuarios();
+  if(id==="config")       renderConfig();
+  if(id==="holding")      { /* ya renderizado al entrar */ }
+}
+
+/* ============================================================================
+   PANEL HOLDING (super admin)
+============================================================================ */
+function renderHolding(rows){
+  const tot = rows.reduce((a,r)=>({emp:a.emp+1, cot:a.cot+Number(r.cotizaciones||0), ap:a.ap+Number(r.cotiz_aprobadas||0), ventas:a.ventas+Number(r.ventas_aprobadas||0)}), {emp:0,cot:0,ap:0,ventas:0});
+  $("holding-kpi").innerHTML =
+    kpi(tot.emp,"Empresas") + kpi(tot.cot,"Cotizaciones") + kpi(tot.ap,"Aprobadas") + kpi(money(tot.ventas),"Ventas aprobadas");
+  $("holding-body").innerHTML = rows.map(r=>`<tr>
+    <td>${esc(r.nombre)}</td><td>${esc(r.plan)}</td><td>${esc(r.estado)}</td>
+    <td>${r.usuarios}</td><td>${r.clientes}</td><td>${r.cotizaciones}</td><td>${r.cotiz_aprobadas}</td>
+    <td>${money(r.ventas_aprobadas)}</td>
+    <td><button class="btn-sec" onclick="entrarComo('${r.id}')">Entrar →</button></td></tr>`).join("")
+    || `<tr><td colspan="9" class="muted">Aún no hay empresas. Créalas con crear_empresa_con_admin().</td></tr>`;
+}
+function entrarComo(id){ $("emp-select").value=id; cambiarEmpresa(id); }
+
+/* ============================================================================
+   INICIO (dashboard de la empresa activa)
+============================================================================ */
+let INI_CHARTS={}, INI_DATA={};
+function iniFill(id, arr, ph){ const sel=$(id); if(!sel) return; const cur=sel.value; sel.innerHTML=`<option value="">${ph}</option>`+arr.map(x=>`<option value="${esc(x.id)}">${esc(x.nombre||"")}</option>`).join(""); sel.value=cur; }
+function iniDestroy(id){ if(INI_CHARTS[id]){ try{INI_CHARTS[id].destroy();}catch(_){} delete INI_CHARTS[id]; } }
+function iniBar(id,labels,data,color){ if(!window.Chart||!$(id)) return; iniDestroy(id);
+  INI_CHARTS[id]=new Chart($(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:color}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"$"+(v/1000|0)+"k"}}},maintainAspectRatio:false}}); }
+function iniLine(id,labels,data,color){ if(!window.Chart||!$(id)) return; iniDestroy(id);
+  INI_CHARTS[id]=new Chart($(id),{type:'line',data:{labels,datasets:[{data,borderColor:color,backgroundColor:color,tension:.25,fill:false}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"$"+(v/1000|0)+"k"}}},maintainAspectRatio:false}}); }
+function iniDoughnut(id,labels,data){ if(!window.Chart||!$(id)) return; iniDestroy(id);
+  INI_CHARTS[id]=new Chart($(id),{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:['#e8b923','#16a34a','#c0392b']}]},options:{maintainAspectRatio:false}}); }
+async function renderInicio(){
+  $("ini-emp").textContent = MT.empresa ? MT.empresa.nombre : "";
+  let cli=[],cot=[],np=[],prov=[];
+  try{ [cli,cot,np,prov]=await Promise.all([
+      tSel("clientes","select=id,nombre,rut"),
+      tSel("cotizaciones","select=*"),
+      tSel("notas_pedido","select=*"),
+      tSel("proveedores","select=id,nombre") ]);
+  }catch(e){ $("ini-kpi").innerHTML=`<div class="muted">No se pudo cargar (${esc(e.message)})</div>`; return; }
+  iniFill("ini-cliente", cli, "Todos los clientes"); iniFill("ini-prov", prov, "Todos los proveedores");
+  const d1=$("ini-desde")?$("ini-desde").value:"", d2=$("ini-hasta")?$("ini-hasta").value:"", fcli=$("ini-cliente")?$("ini-cliente").value:"", fprov=$("ini-prov")?$("ini-prov").value:"";
+  const inRange=f=>{ f=(f||"").slice(0,10); return (!d1||f>=d1)&&(!d2||f<=d2); };
+  const cliMap={}; cli.forEach(c=>cliMap[c.id]=c);
+  const cliq=($("ini-cliq")?$("ini-cliq").value:"").toLowerCase(); const qr=cleanRut(cliq);
+  const matchCli=id=>{ if(!cliq) return true; const c=cliMap[id]; if(!c) return false; return (c.nombre||"").toLowerCase().includes(cliq) || (c.rut||"").toLowerCase().includes(cliq) || (qr.length>=2 && cleanRut(c.rut).includes(qr)); };
+  const cots=cot.filter(c=> inRange(c.fecha||c.created_at) && (!fcli||c.cliente_id===fcli) && matchCli(c.cliente_id));
+  const notas=np.filter(n=> inRange(n.created_at) && (!fprov||n.proveedor_id===fprov));
+  const aprob=cots.filter(c=>c.estado==="aprobada");
+  const ventas=aprob.reduce((a,c)=>a+cotizTotal(c),0);
+  const compras=notas.reduce((a,n)=>a+(Number(n.total)||0),0);
+  const ganancia=aprob.reduce((a,c)=>a+(cotizNeto(c)-cotizCosto(c)),0);
+  $("ini-kpi").innerHTML = kpi(cli.length,"Clientes")+kpi(cots.length,"Cotizaciones")+kpi(aprob.length,"Aprobadas")+kpi(money(ventas),"Ventas")+kpi(money(compras),"Compras")+kpi(money(ganancia),"Ganancia");
+  const mes=f=>(f||"").slice(0,7);
+  const vM={}, gM={}, cM={}, est={pendiente:0,aprobada:0,rechazada:0};
+  cots.forEach(c=>{ if(c.estado in est) est[c.estado]++; else est.pendiente++; });
+  aprob.forEach(c=>{ const m=mes(c.fecha||c.created_at)||"—"; vM[m]=(vM[m]||0)+cotizTotal(c); gM[m]=(gM[m]||0)+(cotizNeto(c)-cotizCosto(c)); });
+  notas.forEach(n=>{ const m=mes(n.created_at)||"—"; cM[m]=(cM[m]||0)+(Number(n.total)||0); });
+  const meses=[...new Set([...Object.keys(vM),...Object.keys(cM),...Object.keys(gM)])].filter(x=>x&&x!=="—").sort();
+  iniBar("ch-ventas", meses, meses.map(m=>vM[m]||0), "#16a34a");
+  iniBar("ch-compras", meses, meses.map(m=>cM[m]||0), "#e8871e");
+  iniLine("ch-ganancia", meses, meses.map(m=>gM[m]||0), "#2563eb");
+  iniDoughnut("ch-estado", ["Pendiente","Aprobada","Rechazada"], [est.pendiente,est.aprobada,est.rechazada]);
+  INI_DATA={emp:$("ini-emp").textContent, k:{cli:cli.length,cot:cots.length,ap:aprob.length,ventas,compras,ganancia}, meses, vM, cM, gM, d1, d2};
+}
+async function exportInicioPDF(){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader(); const d=INI_DATA;
+  const y=await pdfHeader(doc,H,"RESUMEN",["Fecha: "+hoy(),(d.d1||d.d2)?("Periodo: "+(d.d1||"…")+" a "+(d.d2||"…")):""].filter(Boolean));
+  const k=d.k||{};
+  doc.autoTable({startY:y+2, head:[["Indicador","Valor"]], styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]},
+    body:[["Clientes",k.cli],["Cotizaciones",k.cot],["Aprobadas",k.ap],["Ventas",money(k.ventas)],["Compras",money(k.compras)],["Ganancia",money(k.ganancia)]] });
+  let cy=doc.lastAutoTable.finalY+6;
+  for(const [cid,tit] of [["ch-ventas","Ventas por mes"],["ch-compras","Compras por mes"],["ch-ganancia","Ganancia por mes"],["ch-estado","Cotizaciones por estado"]]){
+    const cv=document.getElementById(cid); if(!cv) continue;
+    try{ const img=cv.toDataURL("image/png",1); if(cy>235){ doc.addPage(); cy=16; } doc.setFontSize(10); doc.setTextColor(22,50,79); doc.text(tit,14,cy); cy+=3; doc.addImage(img,"PNG",14,cy,95,48); cy+=54; }catch(_){}
+  }
+  pdfFooter(doc,H); doc.save("resumen-"+(d.emp||"empresa")+".pdf");
+}
+function exportInicioCSV(){ const d=INI_DATA; const rows=[["Mes","Ventas","Compras","Ganancia"]].concat((d.meses||[]).map(m=>[m,d.vM[m]||0,d.cM[m]||0,d.gM[m]||0]));
+  rows.push([]); rows.push(["Clientes",d.k.cli]); rows.push(["Cotizaciones",d.k.cot]); rows.push(["Aprobadas",d.k.ap]); rows.push(["Ventas total",d.k.ventas]); rows.push(["Compras total",d.k.compras]); rows.push(["Ganancia total",d.k.ganancia]);
+  descargaCSV(rows,"resumen-"+(d.emp||"empresa")+".csv"); }
+
+/* ============================================================================
+   CLIENTES (módulo demo — patrón para todos los módulos de negocio)
+============================================================================ */
+let CLI_CACHE=[];
+function csvRows(text){ const rows=[]; let row=[], cur="", q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else { if(ch=='"') q=true; else if(ch==','){ row.push(cur); cur=""; } else if(ch=='\n'){ row.push(cur); rows.push(row); row=[]; cur=""; } else if(ch!='\r') cur+=ch; } }
+  if(cur!==""||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(x=>(x||"").trim()!=="")); }
+async function renderClientes(){
+  const term=($("cl-q")?$("cl-q").value:"").toLowerCase();
+  try{ CLI_CACHE = await tSel("clientes","select=*&order=nombre"); }
+  catch(e){ $("cl-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const qr=cleanRut(term);
+  const list=CLI_CACHE.filter(c=>!term || (c.nombre||"").toLowerCase().includes(term) || (c.rut||"").toLowerCase().includes(term) || (qr.length>=2 && cleanRut(c.rut).includes(qr)));
+  $("cl-body").innerHTML = list.map(c=>`<tr>
+     <td>${esc(c.nombre)}</td><td>${esc(c.rut||"")}</td><td>${esc(c.telefono||"")}</td><td>${esc(c.email||"")}</td><td>${esc(c.direccion||"")}</td>
+     <td style="white-space:nowrap"><button class="btn-sec" onclick="editCliente('${c.id}')">Editar</button> <button class="btn-red" onclick="delCliente('${c.id}')">✕</button></td></tr>`).join("")
+     || `<tr><td colspan="6" class="muted">Sin clientes.</td></tr>`;
+  if($("cl-count")) $("cl-count").textContent=list.length+" clientes";
+}
+function editCliente(id){ const c=CLI_CACHE.find(x=>x.id===id); if(!c) return;
+  $("cl-id").value=c.id; $("cl-nombre").value=c.nombre||""; $("cl-rut").value=c.rut||""; $("cl-tel").value=c.telefono||""; $("cl-mail").value=c.email||""; $("cl-dir").value=c.direccion||""; $("cl-nombre").focus(); }
+function limpiarCliente(){ ["cl-id","cl-nombre","cl-rut","cl-tel","cl-mail","cl-dir"].forEach(id=>{ if($(id)) $(id).value=""; }); }
+async function guardarCliente(){
+  const nombre=$("cl-nombre").value.trim(); if(!nombre){ alert("Nombre obligatorio"); return; }
+  let rut=$("cl-rut").value.trim(); if(rut){ if(!validRut(rut)){ alert("RUT inválido (dígito verificador)."); return; } rut=formatRut(rut); }
+  const row={nombre, rut, telefono:$("cl-tel").value.trim(), email:$("cl-mail").value.trim(), direccion:$("cl-dir").value.trim()};
+  const id=$("cl-id").value;
+  try{ if(id){ await tUpdate("clientes", id, row); } else { await tInsert("clientes", row); }
+    limpiarCliente(); renderClientes(); }
+  catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+async function delCliente(id){ if(!confirm("¿Eliminar cliente?")) return;
+  try{ await tDelete("clientes", id); renderClientes(); }catch(e){ alert("No se pudo eliminar: "+e.message); } }
+function exportClientesCSV(){ descargaCSV([["Nombre","RUT","Telefono","Email","Direccion"]].concat((CLI_CACHE||[]).map(c=>[c.nombre||"",c.rut||"",c.telefono||"",c.email||"",c.direccion||""])),"clientes.csv"); }
+async function importClientesCSV(ev){
+  const file=ev.target.files[0]; if(!file) return; const text=await file.text(); ev.target.value="";
+  const rows=csvRows(text); if(!rows.length){ alert("CSV vacío."); return; }
+  let start=0; const h=rows[0].map(x=>(x||"").toLowerCase());
+  const idx={nombre:h.findIndex(x=>x.includes("nombre")), rut:h.findIndex(x=>x.includes("rut")), tel:h.findIndex(x=>x.includes("tel")), mail:h.findIndex(x=>x.includes("mail")||x.includes("correo")||x.includes("email")), dir:h.findIndex(x=>x.includes("dir"))};
+  if(idx.nombre>=0) start=1; else { idx.nombre=0; idx.rut=1; idx.tel=2; idx.mail=3; idx.dir=4; }
+  const g=(r,k)=>idx[k]>=0?((r[idx[k]]||"").trim()):"";
+  let ins=0, upd=0;
+  for(let i=start;i<rows.length;i++){ const r=rows[i]; const nombre=g(r,'nombre'); if(!nombre) continue;
+    const rut=g(r,'rut'); const row={nombre, rut, telefono:g(r,'tel'), email:g(r,'mail'), direccion:g(r,'dir')};
+    const ex=rut? CLI_CACHE.find(c=>cleanRut(c.rut)===cleanRut(rut) && cleanRut(rut)) : null;
+    try{ if(ex){ await tUpdate("clientes", ex.id, row); upd++; } else { await tInsert("clientes", row); ins++; } }catch(_){}
+  }
+  await renderClientes(); alert("Importación lista. Nuevos: "+ins+", actualizados: "+upd+".");
+}
+
+/* ============================================================================
+   COTIZACIONES (portado de la v30 al modelo multiempresa)
+============================================================================ */
+let CURR = null;      // cotización en edición
+let CAT = [];         // catálogo (productos de la empresa activa)
+let CLIENTES = [];    // clientes de la empresa activa (caché de búsqueda)
+let PROV = [];        // proveedores de la empresa activa
+
+const ivaPct = () => Number(MT.config && MT.config.iva) || 19;
+function ventaUnit(costo, pct){ return Math.round((Number(costo)||0) * (1 + (Number(pct)||0)/100)); }
+function qBaseUnit(q, it){ return (it.precioFijo && it.precioFijo>0) ? it.precioFijo : ventaUnit(it.costo, q.pct); }
+function qDesp(q){
+  const desp = Number(q.despacho)||0, modo = (q.despMode==="lineal")?"lineal":"pct";
+  const base = (q.items||[]).reduce((a,it)=>a + qBaseUnit(q,it)*it.cantidad, 0);
+  const unid = (q.items||[]).reduce((a,it)=>a + (Number(it.cantidad)||0), 0);
+  return { modo,
+    factor:  (modo==="pct"    && base>0 && desp>0) ? desp/base : 0,
+    porUnidad:(modo==="lineal" && unid>0 && desp>0) ? desp/unid : 0 };
+}
+function qUnit(q, it){ const d=qDesp(q); return Math.round(qBaseUnit(q,it)*(1+d.factor) + d.porUnidad); }
+function quoteTotals(q){
+  const neto = (q.items||[]).reduce((a,it)=>a + qUnit(q,it)*it.cantidad, 0);
+  const iva = Math.round(neto*ivaPct()/100);
+  return { neto, iva, total: neto+iva };
+}
+const hoy = () => new Date().toISOString().slice(0,10);
+
+/* ----- Vistas ----- */
+function showBuilder(){ $("view-builder").classList.remove("hidden"); $("view-list").classList.add("hidden"); }
+function showListado(){ $("view-builder").classList.add("hidden"); $("view-list").classList.remove("hidden"); renderQuotes(); }
+
+/* ----- Nueva cotización ----- */
+function nuevaCotiz(){
+  CURR = { id:null, numero:"", fecha:hoy(), clienteId:null, items:[],
+           pct:Number(MT.config.pct_venta)||35, despacho:0, despMode:"pct", obs:"", estado:"pendiente" };
+  $("b-num").value=""; $("b-pct").value=CURR.pct; $("b-despacho").value=0; $("b-despmodo").value="pct";
+  ["b-cli-nombre","b-cli-rut","b-cli-correo","b-cli-tel","b-cli-dir","b-cli-coment","b-cli-search","b-prq"].forEach(id=>{ if($(id)) $(id).value=""; });
+  $("cli-flag").textContent=""; $("cli-results").classList.add("hidden");
+  fillFirmas(); renderCat(); renderItems(); showBuilder(); $("builder-status").textContent="Nueva cotización";
+}
+
+/* ----- Catálogo ----- */
+function renderCat(){
+  const q=($("b-prq").value||"").toLowerCase(), cat=$("b-prcat").value;
+  const list = CAT.filter(p => (!cat || p.categoria===cat) &&
+    (!q || (p.nombre||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q) || (p.proveedor||"").toLowerCase().includes(q))).slice(0,200);
+  $("b-catlist").innerHTML = list.map(p=>`<div class="it" style="display:flex;align-items:center;gap:10px;padding:6px 4px">
+      ${p.imagen
+        ? `<img src="${esc(p.imagen)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:0 0 auto;background:#f1f5f9;border:1px solid var(--linea)" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'ph-img'}))">`
+        : `<div style="width:56px;height:56px;border-radius:8px;flex:0 0 auto;background:#f1f5f9;border:1px solid var(--linea);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:18px">📦</div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;line-height:1.25">${esc(p.nombre||"")}</div>
+        <div class="mini" style="color:#64748b">${esc(p.sku||"")}${p.categoria?(" · "+esc(p.categoria)):""}${p.proveedor?(" · "+esc(p.proveedor)):""} · costo ${money(p.costo)}</div>
+      </div>
+      <button class="btn-sec" style="flex:0 0 auto" onclick="addCatItem('${p.id}')">+ Agregar</button></div>`).join("")
+    || `<div class="muted" style="padding:10px">Sin productos en el catálogo de esta empresa. Usa "fuera de catálogo".</div>`;
+}
+function addCatItem(pid){
+  const p = CAT.find(x=>x.id===pid); if(!p) return;
+  CURR.items.push({ productoId:p.id, nombre:p.nombre, sku:p.sku||"", proveedor:p.proveedor||"", categoria:p.categoria||"",
+                    costo:Number(p.costo)||0, precioFijo:0, cantidad:1, detalle:"", imagen:p.imagen||"" });
+  renderItems();
+}
+function addFueraItem(){
+  const nombre=$("b-fc-nombre").value.trim(); if(!nombre){ alert("Nombre del producto"); return; }
+  const costo=parseNum($("b-fc-costo").value), cant=Math.max(1, parseInt($("b-fc-cant").value)||1);
+  CURR.items.push({ productoId:null, nombre, sku:"", proveedor:$("b-fc-prov").value.trim(),
+                    costo, precioFijo:0, cantidad:cant, detalle:"",
+                    link:($("b-fc-link")?$("b-fc-link").value.trim():""), imagen:($("b-fc-img")?$("b-fc-img").value.trim():"") });
+  $("b-fc-nombre").value=$("b-fc-costo").value=$("b-fc-prov").value=""; $("b-fc-cant").value=1;
+  if($("b-fc-link")) $("b-fc-link").value=""; if($("b-fc-img")) $("b-fc-img").value="";
+  renderItems();
+}
+
+/* ----- Ítems ----- */
+function renderItems(){
+  if(!CURR) return;
+  CURR.pct = Number($("b-pct").value)||0; CURR.despacho = parseNum($("b-despacho").value); CURR.despMode = $("b-despmodo").value;
+  if(!CURR.items.length){ $("b-items").innerHTML = `<div class="muted">Agrega productos del catálogo o "fuera de catálogo".</div>`; recalc(); return; }
+  const rows = CURR.items.map((it,i)=>{ const pu=qUnit(CURR,it); const img=itemImg(it); return `<tr>
+      <td>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:0 0 46px">
+            ${img?`<img src="${esc(img)}" onerror="this.style.display='none'" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--linea)">`:`<div style="width:46px;height:46px;border-radius:6px;border:1px dashed var(--linea);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9ca3af">🪑</div>`}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${esc(it.nombre)}</div>
+            <textarea placeholder="Detalle del producto (se muestra en el PDF)" oninput="setItemDetalle(${i},this.value)" rows="5" style="width:100%;margin-top:3px;font-size:11px;line-height:1.4;resize:vertical;min-height:96px">${esc(it.detalle||"")}</textarea>
+            <div style="display:flex;gap:4px;margin-top:3px">
+              <input placeholder="Link del producto (interno — el cliente NO lo ve)" value="${esc(it.link||"")}" oninput="setItemLink(${i},this.value)" style="flex:1;font-size:11px">
+              <button class="btn-sec" style="padding:2px 8px" onclick="buscarProdWeb(${i})" title="Buscar el producto en la web (imagen/link)">🔎 Buscar</button>
+            </div>
+            <input placeholder="URL de imagen (pega o usa Buscar) — sale en el PDF" value="${esc(it.imagen||"")}" oninput="setItemImagen(${i},this.value)" style="width:100%;font-size:11px;margin-top:3px">
+          </div>
+        </div>
+      </td>
+      <td style="width:64px"><input type="number" min="1" value="${it.cantidad}" onchange="setItemCant(${i},this.value)"></td>
+      <td style="width:110px"><input type="text" inputmode="decimal" value="${pu}" onchange="setItemPrecio(${i},this.value)" title="Precio neto unitario"></td>
+      <td class="right" style="width:90px">${money(pu*it.cantidad)}</td>
+      <td style="width:34px"><button class="btn-red" onclick="delItem(${i})">✕</button></td></tr>`; }).join("");
+  $("b-items").innerHTML = `<table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio neto</th><th class="right">Total</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  recalc();
+}
+function setItemCant(i,v){ if(CURR.items[i]){ CURR.items[i].cantidad=Math.max(1,parseInt(v)||1); renderItems(); } }
+function setItemPrecio(i,v){ if(CURR.items[i]){ const n=parseNum(v); CURR.items[i].precioFijo=(n>0)?n:0; renderItems(); } }
+function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,400); }
+function setItemLink(i,v){ if(CURR.items[i]) CURR.items[i].link=(v||"").trim(); }
+function setItemImagen(i,v){ if(CURR.items[i]){ CURR.items[i].imagen=(v||"").trim(); renderItems(); } }
+// Búsqueda del producto en la web (imagen/link). Abre búsqueda de compras + imágenes.
+function buscarProdWeb(i){
+  const it=CURR.items[i]; if(!it) return;
+  const q=encodeURIComponent(((it.nombre||"")+" "+(it.detalle||"")).trim());
+  if(!q){ alert("La línea no tiene nombre para buscar."); return; }
+  window.open("https://www.google.com/search?tbm=shop&q="+q, "_blank");   // compras (precio/link)
+  window.open("https://www.google.com/search?tbm=isch&q="+q, "_blank");   // imágenes (copia la URL a «URL de imagen»)
+}
+function delItem(i){ CURR.items.splice(i,1); renderItems(); }
+function recalc(){
+  if(!CURR) return;
+  CURR.pct=Number($("b-pct").value)||0; CURR.despacho=parseNum($("b-despacho").value); CURR.despMode=$("b-despmodo").value;
+  const t=quoteTotals(CURR);
+  $("b-sub").textContent=money(t.neto); $("b-iva").textContent=money(t.iva); $("b-total").textContent=money(t.total);
+}
+
+/* ----- Cliente inline (contra el caché CLIENTES de la empresa) ----- */
+function buscarClienteInline(){
+  const box=$("cli-results"), v=$("b-cli-search").value.trim();
+  if(!v){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  const qn=v.toLowerCase(), qr=cleanRut(v);
+  const m=CLIENTES.filter(c=> (c.nombre||"").toLowerCase().includes(qn) || (qr.length>=2 && cleanRut(c.rut).includes(qr))).slice(0,8);
+  box.innerHTML = m.map(c=>`<div onclick="selectCliente('${c.id}')"><b>${esc(c.nombre)}</b> · ${esc(c.rut||"")}${c.telefono?(" · "+esc(c.telefono)):""}</div>`).join("")
+    || `<div class="muted" style="padding:6px 8px">No existe — completa los datos y presiona "Crear / Guardar".</div>`;
+  box.classList.remove("hidden");
+}
+function selectCliente(id){
+  const c=CLIENTES.find(x=>x.id===id); if(!c) return;
+  $("b-cli-nombre").value=c.nombre; $("b-cli-rut").value=c.rut||""; $("b-cli-correo").value=c.email||"";
+  $("b-cli-tel").value=c.telefono||""; $("b-cli-dir").value=c.direccion||"";
+  CURR.clienteId=c.id; $("cli-results").classList.add("hidden"); $("b-cli-search").value=(c.rut?c.rut+" · ":"")+c.nombre;
+  $("cli-flag").textContent="✓ Cliente cargado: "+c.nombre;
+}
+async function ensureCliente(requireRut){
+  const nombre=$("b-cli-nombre").value.trim(); let rut=$("b-cli-rut").value.trim();
+  if(!nombre){ if(requireRut) alert("Ingresa el nombre del cliente."); return null; }
+  if(rut){ if(!validRut(rut)){ alert("RUT inválido (dígito verificador)."); return null; } rut=formatRut(rut); }
+  else if(requireRut){ alert("El RUT es obligatorio para guardar el cliente."); return null; }
+  const payload={ nombre, rut, direccion:$("b-cli-dir").value.trim(), telefono:$("b-cli-tel").value.trim(), email:$("b-cli-correo").value.trim() };
+  let existing = CURR.clienteId ? CLIENTES.find(c=>c.id===CURR.clienteId) : (rut?CLIENTES.find(c=>cleanRut(c.rut)===cleanRut(rut)):null);
+  let saved;
+  try{
+    if(existing){ await tUpdate("clientes", existing.id, payload); saved={...existing, ...payload}; }
+    else { const r=await tInsert("clientes", payload); saved=Array.isArray(r)?r[0]:r; }
+  }catch(e){ alert("No se pudo guardar el cliente: "+e.message); return null; }
+  CURR.clienteId=saved.id;
+  CLIENTES = await tSel("clientes","select=*&order=nombre");
+  return saved;
+}
+async function guardarClienteInline(){
+  const c=await ensureCliente(true);
+  if(c){ $("cli-results").classList.add("hidden"); $("b-cli-search").value=(c.rut?c.rut+" · ":"")+c.nombre; $("cli-flag").textContent="✓ Cliente guardado: "+c.nombre; renderClientes(); }
+}
+
+/* ----- Guardar cotización ----- */
+function collectQuote(){
+  CURR.obs=$("b-cli-coment").value.trim(); CURR.pct=Number($("b-pct").value)||0;
+  CURR.despacho=parseNum($("b-despacho").value); CURR.despMode=$("b-despmodo").value;
+  const manual=$("b-num").value.trim(); if(manual) CURR.numero=manual;
+}
+async function builderSave(){
+  if(!CURR.items.length){ alert("Agrega al menos un producto."); return false; }
+  await ensureCliente(false);                 // guarda/actualiza el cliente si hay nombre
+  collectQuote();
+  $("builder-status").textContent="Guardando…";
+  try{
+    if(!CURR.numero) CURR.numero = await siguienteNumero("cotizacion","COT");
+    const t=quoteTotals(CURR);
+    const row={ numero:CURR.numero, fecha:CURR.fecha, cliente_id:CURR.clienteId||null,
+      vendedor_id:MT.user.id, vendedor_name:(MT.perfil&&MT.perfil.nombre)||MT.user.email,
+      items:CURR.items, despacho:CURR.despacho, pct:CURR.pct, obs:CURR.obs, estado:CURR.estado||"pendiente",
+      data:{ total:t.total, neto:t.neto, iva:t.iva, despMode:CURR.despMode, firmaIdx:($("b-firma")?parseInt($("b-firma").value):0) } };
+    if(CURR.id){ await tUpdate("cotizaciones", CURR.id, row); }
+    else { const r=await tInsert("cotizaciones", row); const saved=Array.isArray(r)?r[0]:r; CURR.id=saved.id; }
+    $("b-num").value=CURR.numero;
+    // Guardar también envía un respaldo interno por correo (vendedor + cotización)
+    respaldoInterno("guarda_cotizacion", { numero:CURR.numero, cliente:($("b-cli-nombre")?$("b-cli-nombre").value.trim():""), total:t.total });
+    $("builder-status").textContent="Guardada: "+CURR.numero+" · respaldo interno enviado";
+    return true;
+  }catch(e){ $("builder-status").textContent=""; alert("No se pudo guardar: "+e.message); return false; }
+}
+async function builderGuardar(){
+  const num=CURR&&CURR.numero;
+  const ok=await builderSave();
+  if(ok){
+    alert("✅ Cotización "+(CURR.numero||num||"")+" guardada"+((MT.config&&MT.config.apps_script_url)?" · respaldo interno enviado":"")+".");
+    nuevaCotiz();   // limpia el formato para una nueva cotización
+  }
+}
+function builderWhatsApp(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  const t=quoteTotals(CURR);
+  const lineas=CURR.items.map(it=>`• ${it.nombre} x${it.cantidad}: ${money(qUnit(CURR,it)*it.cantidad)}`).join("%0A");
+  const tel=(MT.config.telefono||"").replace(/[^0-9]/g,"");
+  const txt=`Cotización ${CURR.numero||""}%0A${lineas}%0ATOTAL: ${money(t.total)} (IVA incl.)`;
+  window.open("https://wa.me/"+tel+"?text="+txt, "_blank");
+}
+async function builderEmail(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  await builderSave();
+  await builderPDF();
+  const to=$("b-cli-correo")?$("b-cli-correo").value.trim():"";
+  const t=quoteTotals(CURR);
+  const razon=(MT.config&&MT.config.razon_social)||(MT.empresa&&MT.empresa.nombre)||"";
+  const asunto="Cotización "+(CURR.numero||"")+" - "+razon;
+  const cuerpo="Estimado(a),\n\nAdjuntamos la cotización N° "+(CURR.numero||"")+" por un total de "+money(t.total)+" (IVA incluido).\n\nSaludos,\n"+razon;
+  window.open("mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo), "_blank");
+}
+async function marcarPostulada(cod){ try{ if(cod){ const q=await tSel("oportunidades","codigo=eq."+encodeURIComponent(cod)+"&select=id"); if(q&&q[0]) await tUpdate("oportunidades", q[0].id, {estado_int:"postulada"}); } }catch(_){} }
+async function builderMercadoPublico(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  await builderSave();
+  const cod=CURR.numero||""; const t=quoteTotals(CURR);
+  const url=(MT.config&&MT.config.apps_script_url)||"";
+  const payload={ codigo:cod, empresa:(MT.empresa&&MT.empresa.nombre)||"", rut:(MT.config&&MT.config.rut)||"",
+    total:t.total, neto:t.neto, iva:t.iva,
+    items:CURR.items.map(it=>({nombre:it.nombre, cantidad:it.cantidad, precio_unit:qUnit(CURR,it), costo:it.costo})) };
+  // 1) Publicar SIN salir del sistema: el CRM llama a tu backend (Apps Script)
+  if(url){
+    try{
+      const r=await fetch(url+(url.includes("?")?"&":"?")+"action=publicar", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
+      let j=null; try{ j=await r.json(); }catch(_){}
+      await marcarPostulada(cod);
+      if(j && (j.ok||j.publicado)){ alert("✅ Oferta publicada en Mercado Público para "+cod+" (vía integración)."); return; }
+      alert("Envié la orden de publicar al backend y marqué la oportunidad como postulada.\nSi tu Apps Script aún no implementa «action=publicar», hay que completarlo para publicar 100% sin salir del sistema.");
+      return;
+    }catch(e){ /* CORS o backend caído → fallback */ }
+  }
+  // 2) Fallback (sin backend): preparo todo y abro el portal para publicar con Clave Única
+  await builderPDF(); await marcarPostulada(cod);
+  window.open(mpUrl(cod), "_blank");
+  alert("Para publicar sin salir del sistema necesito tu Apps Script con «action=publicar» (o las credenciales de ChileCompra). Por ahora dejé el PDF listo y abrí el portal para publicar con tu Clave Única.");
+}
+async function delQuote(id){ if(!confirm("¿Eliminar esta cotización?")) return;
+  try{ await tDelete("cotizaciones", id); renderQuotes(); }catch(e){ alert("No se pudo eliminar: "+e.message); } }
+
+/* ----- Listado ----- */
+function badge(e){ const k=e==="aprobada"?"a":(e==="rechazada"?"r":"p"); return `<span class="est ${k}">${esc(e||"pendiente")}</span>`; }
+function puedeAprobar(){ return ["super_admin","admin_empresa","supervisor"].includes(MT.rol); }
+async function renderQuotes(){
+  const q=($("cot-q").value||"").toLowerCase();
+  let list;
+  try{ list = await tSel("cotizaciones","select=*&order=fecha.desc"); }catch(e){ $("cot-body").innerHTML=`<tr><td colspan="8" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const byId={}; CLIENTES.forEach(c=>byId[c.id]=c);
+  list = list.filter(x=>{ const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||""; return !q || (x.numero||"").toLowerCase().includes(q) || cn.toLowerCase().includes(q) || (x.estado||"").toLowerCase().includes(q); });
+  $("cot-body").innerHTML = list.map(x=>{
+    const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||"—", total=(x.data&&x.data.total)||0;
+    const acc = `<button class="btn-sec" onclick="pdfQuote('${x.id}')">PDF</button> `
+      + `<button class="btn-sec" onclick="editQuote('${x.id}')">Editar</button> `
+      + `<button class="btn-sec" onclick="enviarQuoteCorreo('${x.id}')">✉ Correo</button> `
+      + `<button class="btn-blue" onclick="pasarAOC('${x.id}')">➡ OC</button> `
+      + ((puedeAprobar() && x.estado==="pendiente") ? `<button class="btn-green" onclick="aprobar('${x.id}')">Aprobar</button> <button class="btn-red" onclick="rechazar('${x.id}')">Rechazar</button> ` : "")
+      + `<button class="btn-red" onclick="delQuote('${x.id}')">✕</button>`;
+    return `<tr><td>${esc(x.numero||"")}</td><td>${esc(x.fecha||"")}</td><td>${esc(cn)}</td><td>${esc(x.vendedor_name||"")}</td>
+      <td class="right">${money(total)}</td><td>${badge(x.estado)}</td><td>${esc(x.oc_numero||"")}</td><td>${acc}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">Sin cotizaciones en esta empresa.</td></tr>`;
+}
+async function fetchQuote(id){ const r=await tSel("cotizaciones","id=eq."+id+"&select=*"); return r[0]; }
+async function editQuote(id){
+  const q=await fetchQuote(id); if(!q) return;
+  CURR={ id:q.id, numero:q.numero||"", fecha:q.fecha||hoy(), clienteId:q.cliente_id||null, items:q.items||[],
+         pct:Number(q.pct)||35, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct", obs:q.obs||"", estado:q.estado||"pendiente", oc_numero:q.oc_numero };
+  $("b-num").value=CURR.numero; $("b-pct").value=CURR.pct; $("b-despacho").value=CURR.despacho; $("b-despmodo").value=CURR.despMode;
+  $("b-cli-coment").value=CURR.obs;
+  const c=CLIENTES.find(x=>x.id===CURR.clienteId);
+  if(c){ selectCliente(c.id); } else { ["b-cli-nombre","b-cli-rut","b-cli-correo","b-cli-tel","b-cli-dir","b-cli-search"].forEach(id=>$(id).value=""); }
+  renderCat(); renderItems(); showBuilder(); $("builder-status").textContent="Editando "+CURR.numero;
+}
+async function aprobar(id){
+  if(!puedeAprobar()) return;
+  const q=await fetchQuote(id); if(!q) return;
+  let oc=prompt("N° de Orden de Compra (deja vacío para autonumerar):", q.oc_numero||"");
+  if(oc===null) return;
+  try{
+    const num=(oc.trim()) || (await siguienteNumero("orden_compra","OC"));
+    await tUpdate("cotizaciones", id, { estado:"aprobada", oc_numero:num, aprobada_fecha:hoy() });
+    await crearOCdesdeCotiz(q, num);
+    renderQuotes();
+    alert("✅ Cotización aprobada y Orden de Compra "+num+" creada. Revisa el módulo «Órdenes de compra».");
+  }
+  catch(e){ alert("No se pudo aprobar: "+e.message); }
+}
+/* --- Secuencia: Cotización → Orden de compra (desde el listado) --- */
+async function pasarAOC(id){
+  const q=await fetchQuote(id); if(!q){ alert("No se encontró la cotización."); return; }
+  if(!(q.items&&q.items.length)){ alert("La cotización no tiene productos."); return; }
+  let num=q.oc_numero;
+  if(!num){ try{ num=await siguienteNumero("orden_compra","OC"); }catch(_){ num="OC-"+(q.numero||Date.now()); } }
+  try{
+    await tUpdate("cotizaciones", id, { estado:(q.estado==="rechazada"?"rechazada":"aprobada"), oc_numero:num, aprobada_fecha:q.aprobada_fecha||hoy() });
+    await crearOCdesdeCotiz(Object.assign({}, q, {oc_numero:num}), num);
+    if($("cot-body")) renderQuotes();
+    alert("➡ Orden de compra "+num+" generada desde "+(q.numero||"la cotización")+".\nDesde «Órdenes de compra» podrás pasarla a Nota de pedido.");
+    go("ordenes");
+  }catch(e){ alert("No se pudo pasar a Orden de compra: "+e.message); }
+}
+async function enviarQuoteCorreo(id){
+  const q=await fetchQuote(id); if(!q){ alert("No se encontró la cotización."); return; }
+  const cli=(CLIENTES||[]).find(c=>c.id===q.cliente_id)||{};
+  const to=((cli.email||cli.correo||"")+"").trim();
+  const qobj={ items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct",
+               numero:q.numero, fecha:q.fecha, obs:q.obs, firmaIdx:(q.data&&q.data.firmaIdx) };
+  const t=quoteTotals(qobj);
+  const razon=(MT.config&&MT.config.razon_social)||(MT.empresa&&MT.empresa.nombre)||"";
+  const asunto="Cotización "+(q.numero||"")+" - "+razon;
+  const cuerpo="Estimado(a) "+(cli.nombre||"")+",\n\nAdjuntamos la cotización N° "+(q.numero||"")+" por un total de "+money(t.total)+" (IVA incluido).\n\nSaludos,\n"+razon;
+  // Genera el PDF (con productos, imágenes, valores y fechas) para adjuntarlo
+  let pdf64=""; try{ pdf64=await pdfCotizacion(qobj, cli, "b64", qobj.firmaIdx); }catch(_){}
+  const items=(q.items||[]).map(it=>{ const pu=qUnit(qobj,it); const c=Number(it.cantidad)||1;
+    return { nombre:it.nombre, cantidad:c, precio:pu, total:pu*c, detalle:it.detalle||"" }; });
+  const url=(MT.config&&MT.config.apps_script_url)||"";
+  if(url){
+    try{
+      const r=await fetch(url+(url.includes("?")?"&":"?")+"action=correo", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({ to, asunto, cuerpo, numero:q.numero||"", fecha:q.fecha||"",
+          empresa:(MT.empresa&&MT.empresa.nombre)||"", vendedor:(q.vendedor_name||(MT.perfil&&MT.perfil.nombre)||""),
+          cliente:{ nombre:cli.nombre||"", rut:cli.rut||"", email:to, telefono:cli.telefono||"", direccion:cli.direccion||"" },
+          items, neto:t.neto, iva:t.iva, total:t.total,
+          pdf_base64:pdf64, pdf_nombre:(q.numero||"cotizacion")+".pdf" })});
+      let j=null; try{ j=await r.json(); }catch(_){}
+      respaldoInterno("envia_cotizacion_correo", {numero:q.numero||"", to, total:t.total});
+      if(j && (j.ok||j.enviado)){ alert("✉ Cotización "+(q.numero||"")+" enviada a "+(to||"el cliente")+" con PDF adjunto."); return; }
+      alert("Orden de envío mandada al backend (respaldo interno registrado). Si tu Apps Script aún no implementa «action=correo», complétalo para el envío directo."); return;
+    }catch(_){}
+  }
+  if(!to){ alert("El cliente no tiene correo registrado."); return; }
+  window.open("mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo), "_blank");
+}
+async function rechazar(id){
+  if(!puedeAprobar()) return;
+  if(!confirm("¿Rechazar esta cotización?")) return;
+  try{ await tUpdate("cotizaciones", id, { estado:"rechazada" }); renderQuotes(); }
+  catch(e){ alert("No se pudo rechazar: "+e.message); }
+}
+
+/* ----- PDF (jsPDF + autotable) — branding por empresa desde empresa.config ----- */
+function empresaPDFHeader(){ const e=MT.empresaFull||{}, c=MT.config||{};
+  return { nombre:e.nombre||c.razon_social||(MT.empresa&&MT.empresa.nombre)||"", rut:e.rut||c.rut||"",
+           direccion:c.direccion||"", telefono:c.telefono||"", emails:c.emails||"", web:c.web||"", tienda:c.tienda||"",
+           bancos:c.bancos||[], firmas:c.firmas||[], nota:c.nota_importante||"", logo_url:e.logo_url||c.logo_url||"" }; }
+/* Carga una imagen (logo o foto) evitando problemas CORS vía proxy, y la vuelve dataURL para jsPDF */
+function proxImg(url){ if(!url) return ""; if(url.indexOf("data:")===0) return url; return "https://images.weserv.nl/?url="+encodeURIComponent(url.replace(/^https?:\/\//,"")); }
+function cargarImagen(url){ return new Promise(res=>{ if(!url){ res(null); return; }
+  const im=new Image(); im.crossOrigin="anonymous";
+  im.onload=()=>{ try{ const mw=420, sc=Math.min(1, mw/(im.naturalWidth||mw)); const cv=document.createElement("canvas");
+      cv.width=Math.max(1,Math.round((im.naturalWidth||mw)*sc)); cv.height=Math.max(1,Math.round((im.naturalHeight||mw)*sc));
+      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); res({data:cv.toDataURL("image/jpeg",0.82), w:cv.width, h:cv.height}); }
+    catch(_){ res(null); } };
+  im.onerror=()=>res(null); im.src=proxImg(url); }); }
+function itemImg(it){ return it.imagen || ((CAT.find(p=>p.id===it.productoId)||{}).imagen) || ""; }
+async function pdfHeader(doc, H, titulo, meta){
+  let logo=null; try{ logo=await cargarImagen(H.logo_url); }catch(_){}
+  let tx=14;
+  if(logo){ const w=27, h=Math.min(20, w*(logo.h/logo.w)); try{ doc.addImage(logo.data,"JPEG",13,11,w,h); tx=45; }catch(_){ tx=14; } }
+  doc.setFont(undefined,'bold'); doc.setFontSize(13); doc.setTextColor(17); doc.text(H.nombre||"Empresa", tx, 17);
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.2); doc.setTextColor(80);
+  const lines=[H.rut?("RUT: "+H.rut):"", H.direccion, H.telefono, H.emails, [H.web,H.tienda].filter(Boolean).join(" · ")].filter(Boolean);
+  doc.text(lines, tx, 23);
+  doc.setFont(undefined,'bold'); doc.setFontSize(17); doc.setTextColor(22,50,79); doc.text(titulo, 196, 17, {align:'right'});
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(80); doc.text(meta, 196, 24, {align:'right'});
+  doc.setDrawColor(232,135,30); doc.setLineWidth(0.9); doc.line(14, 40, 196, 40); doc.setLineWidth(0.2); doc.setDrawColor(200);
+  return 46;
+}
+function pdfFooter(doc, H){
+  doc.setFontSize(7); doc.setTextColor(120);
+  const line=[H.nombre, H.rut?("RUT "+H.rut):"", H.direccion, H.emails, H.web].filter(Boolean).join(" · ");
+  doc.text(doc.splitTextToSize(line,182), 105, 288, {align:'center'});
+}
+function fillFirmas(){ const sel=$("b-firma"); if(!sel) return; const fs=(MT.config&&MT.config.firmas)||[];
+  sel.innerHTML = fs.length ? fs.map((f,i)=>`<option value="${i}">${esc(f.nombre||"")}${f.cargo?(" · "+esc(f.cargo)):""}</option>`).join("")+'<option value="-1">— sin firma —</option>' : '<option value="-1">— sin firma —</option>'; }
+async function pdfCotizacion(q, cli, out, firmaIdx){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader(); const t=quoteTotals(q);
+  const fechaFmt=(q.fecha||hoy()).split("-").reverse().join("-");
+  let validez=""; try{ const d=new Date((q.fecha||hoy())+"T00:00:00"); d.setDate(d.getDate()+15); validez=d.toISOString().slice(0,10).split("-").reverse().join("-"); }catch(_){}
+  let y=await pdfHeader(doc, H, "PRESUPUESTO", ["N°: "+(q.numero||""), "Fecha: "+fechaFmt, validez?("Válido hasta: "+validez):""].filter(Boolean));
+  doc.setFontSize(9); doc.setTextColor(30);
+  const cinfo=`Empresa/Institución: ${cli.nombre||""}  |  RUT: ${cli.rut||""}  |  Correo: ${cli.email||""}  |  Teléfono: ${cli.telefono||""}`;
+  const cl=doc.splitTextToSize(cinfo,182); doc.text(cl,14,y); y+=cl.length*4+1;
+  if(cli.direccion){ const dl=doc.splitTextToSize("Dirección/Región: "+cli.direccion,182); doc.text(dl,14,y); y+=dl.length*4; }
+  y+=3;
+  const imgs={}; for(const it of (q.items||[])){ const u=itemImg(it); if(u && imgs[u]===undefined){ imgs[u]=await cargarImagen(u); } }
+  const conFoto=(q.items||[]).some(it=>imgs[itemImg(it)]);
+  const body=(q.items||[]).map(it=>{ const p=qUnit(q,it);
+    const desc=[ (it.detalle&&it.detalle.trim())?it.detalle.trim():"", [it.sku,it.categoria,it.proveedor].filter(Boolean).join(" · ") ].filter(Boolean).join("\n");
+    const nom=it.nombre+(desc?("\n"+desc):"");
+    return conFoto ? ["", nom, it.cantidad, money(p), money(p*it.cantidad)] : [nom, it.cantidad, money(p), money(p*it.cantidad)]; });
+  const head = conFoto ? [["Foto","Producto","Cant.","Precio neto","Total"]] : [["Producto","Cant.","Precio neto","Total"]];
+  const colStyles = conFoto ? {0:{cellWidth:20},2:{halign:"center",cellWidth:16},3:{halign:"right",cellWidth:30},4:{halign:"right",cellWidth:30}}
+                            : {1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}};
+  doc.autoTable({ startY:y, head, body, styles:{fontSize:9,valign:"middle",minCellHeight:conFoto?16:8}, headStyles:{fillColor:[22,50,79]}, columnStyles:colStyles,
+    didDrawCell:(d)=>{ if(conFoto && d.section==='body' && d.column.index===0){ const it=(q.items||[])[d.row.index]; const im=it&&imgs[itemImg(it)];
+        if(im){ const cw=d.cell.width-2, ch=d.cell.height-2; let w=cw, h=w*(im.h/im.w); if(h>ch){ h=ch; w=h*(im.w/im.h); }
+          try{ doc.addImage(im.data,"JPEG", d.cell.x+(d.cell.width-w)/2, d.cell.y+(d.cell.height-h)/2, w, h); }catch(_){} } } } });
+  doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9},
+    body:[["Subtotal neto",money(t.neto)],["IVA "+ivaPct()+"%",money(t.iva)],["TOTAL",money(t.total)]],
+    columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
+  let ey=doc.lastAutoTable.finalY+8; doc.setTextColor(50);
+  if(q.obs){ doc.setFontSize(8); const o=doc.splitTextToSize("Observaciones: "+q.obs,182); doc.text(o,14,ey); ey+=o.length*3.5+3; }
+  const fs=H.firmas||[]; let fi=(firmaIdx!=null?firmaIdx:(q.firmaIdx!=null?q.firmaIdx:0)); const firma=(fi>=0)?fs[fi]:null;
+  if(firma){ ey+=7; const cx=105; doc.setDrawColor(120); doc.line(cx-30,ey,cx+30,ey); ey+=5;
+    doc.setFont(undefined,'bold'); doc.setFontSize(9.5); doc.setTextColor(20); doc.text(firma.nombre||"",cx,ey,{align:'center'}); ey+=4;
+    doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.setTextColor(70);
+    if(firma.cargo){ doc.text(firma.cargo,cx,ey,{align:'center'}); ey+=4; } if(firma.tel){ doc.text(firma.tel,cx,ey,{align:'center'}); ey+=4; } }
+  ey+=4;
+  if((H.bancos||[]).length){ doc.setFont(undefined,'bold'); doc.setFontSize(8); doc.setTextColor(30); doc.text("Datos para transferencia:",14,ey); ey+=4;
+    doc.setFont(undefined,'normal'); doc.setFontSize(7.5); doc.setTextColor(60); H.bancos.forEach(b=>{ const bl=doc.splitTextToSize("• "+b,182); doc.text(bl,14,ey); ey+=bl.length*3.6; }); ey+=1; }
+  if(H.nota){ doc.setFont(undefined,'bold'); doc.setFontSize(8); doc.setTextColor(180,30,30); doc.text("IMPORTANTE: "+H.nota,14,ey); ey+=5; doc.setFont(undefined,'normal'); }
+  doc.setFontSize(7.5); doc.setTextColor(90);
+  doc.text(doc.splitTextToSize("Precios en CLP, netos + IVA ("+ivaPct()+"%). Presupuesto válido 15 días. Precios y stock sujetos a confirmación. Despacho a todo Chile (valor según destino).",182),14,ey);
+  pdfFooter(doc,H);
+  if(out==="save") doc.save((q.numero||"cotizacion")+".pdf");
+  else if(out==="b64"){ const u=doc.output("datauristring"); return (u.split(",")[1]||u); }
+  else doc.output("dataurlnewwindow");
+}
+async function builderPDF(){
+  if(!CURR || !CURR.items.length){ alert("Agrega productos primero."); return; }
+  collectQuote();
+  const cli={ nombre:$("b-cli-nombre").value.trim(), rut:$("b-cli-rut").value.trim(), email:$("b-cli-correo").value.trim(), telefono:$("b-cli-tel").value.trim(), direccion:$("b-cli-dir").value.trim() };
+  const fi = $("b-firma") ? (parseInt($("b-firma").value)) : 0;
+  await pdfCotizacion(CURR, cli, "save", fi);
+}
+async function pdfQuote(id){
+  const q=await fetchQuote(id); if(!q) return;
+  const cli=CLIENTES.find(c=>c.id===q.cliente_id)||{};
+  await pdfCotizacion({ items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct", numero:q.numero, fecha:q.fecha, obs:q.obs, firmaIdx:(q.data&&q.data.firmaIdx) }, cli, "save");
+}
+
+/* ----- Utilidades RUT / números (portadas de la v30) ----- */
+function cleanRut(r){ return (r||"").replace(/[^0-9kK]/g,"").toUpperCase(); }
+function formatRut(r){ r=cleanRut(r); if(r.length<2) return r; const dv=r.slice(-1); let num=r.slice(0,-1), out=""; while(num.length>3){ out="."+num.slice(-3)+out; num=num.slice(0,-3); } return num+out+"-"+dv; }
+function validRut(r){ r=cleanRut(r); if(r.length<2) return false; const dv=r.slice(-1), num=r.slice(0,-1); if(!/^\d+$/.test(num)) return false; let s=1,m=0; for(let i=num.length-1;i>=0;i--){ s=(s+parseInt(num[i])*(9-m%6))%11; m++; } const calc=s?String(s-1):"K"; return calc===dv; }
+function parseNum(v){ if(typeof v==="number") return v; v=String(v).trim(); if(!v) return 0; v=v.replace(/\s/g,"").replace(/\./g,"").replace(",","."); const n=parseFloat(v); return isNaN(n)?0:n; }
+function fmtN(n){ return (Math.round(Number(n)||0)).toLocaleString("es-CL"); }
+
+/* ============================================================================
+   PRODUCTOS (catálogo por empresa)
+============================================================================ */
+const dlgPr = () => document.getElementById("dlg-pr");
+let PROD_PEND = {};   // ediciones en línea pendientes de guardar {id:{campo:valor}}
+
+function renderProductos(){
+  const q=($("pr-q").value||"").toLowerCase();
+  const list = CAT.filter(p => (p.nombre||"").toLowerCase().includes(q) || (p.categoria||"").toLowerCase().includes(q)
+    || (p.proveedor||"").toLowerCase().includes(q) || (p.sku||"").toLowerCase().includes(q)).slice(0,500);
+  $("pr-count").textContent = CAT.length+" productos"+(CAT.length>500?" (mostrando 500)":"");
+  $("pr-body").innerHTML = list.map(p=>`<tr data-id="${p.id}">
+    <td>${esc(p.nombre||"")}</td><td class="mini">${esc(p.sku||"")}</td>
+    <td><input value="${esc(p.categoria||"")}" onchange="editProd('${p.id}','categoria',this.value)"></td>
+    <td class="right"><input type="text" inputmode="decimal" value="${fmtN(p.costo||0)}" onchange="editProd('${p.id}','costo',this.value)" style="text-align:right"></td>
+    <td class="right"><input type="text" inputmode="decimal" value="${fmtN(p.precio||0)}" onchange="editProd('${p.id}','precio',this.value)" style="text-align:right"></td>
+    <td><input value="${esc(p.proveedor||"")}" onchange="editProd('${p.id}','proveedor',this.value)"></td>
+    <td><button class="btn-sec" onclick="openProducto('${p.id}')">✎</button> <button class="btn-red" onclick="delProd('${p.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">Sin resultados.</td></tr>`;
+  pintarPendientes();
+}
+function editProd(id,f,v){
+  const val=(f==="costo"||f==="precio")?parseNum(v):v;
+  const p=CAT.find(x=>x.id===id); if(!p) return;
+  if(String(p[f]==null?"":p[f])===String(val)){ if(PROD_PEND[id]){ delete PROD_PEND[id][f]; if(!Object.keys(PROD_PEND[id]).length) delete PROD_PEND[id]; } }
+  else { PROD_PEND[id]=PROD_PEND[id]||{}; PROD_PEND[id][f]=val; }
+  pintarPendientes();
+}
+function pintarPendientes(){
+  const n=Object.keys(PROD_PEND).length, b=$("pr-save"), u=$("pr-undo");
+  if(b){ b.style.display=n?"":"none"; b.textContent="💾 Guardar cambios ("+n+")"; }
+  if(u){ u.style.display=n?"":"none"; }
+  document.querySelectorAll("#pr-body tr").forEach(tr=>{ const id=tr.dataset.id; tr.style.background=(id&&PROD_PEND[id])?"#fff7e6":""; });
+}
+async function guardarCambiosProd(){
+  const ids=Object.keys(PROD_PEND); if(!ids.length){ alert("No hay cambios pendientes."); return; }
+  try{
+    for(const id of ids){ await tUpdate("productos", id, PROD_PEND[id]); const p=CAT.find(x=>x.id===id); if(p) Object.assign(p, PROD_PEND[id]); }
+    PROD_PEND={}; renderProductos(); refrescarCatUI();
+    alert("Guardado: "+ids.length+" producto(s) actualizado(s).");
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+function descartarCambiosProd(){ if(!Object.keys(PROD_PEND).length) return; if(!confirm("¿Descartar los cambios sin guardar?")) return; PROD_PEND={}; renderProductos(); }
+async function delProd(id){
+  if(!confirm("¿Eliminar producto?")) return;
+  try{ await tDelete("productos", id); CAT=CAT.filter(x=>x.id!==id); delete PROD_PEND[id]; renderProductos(); refrescarCatUI(); }
+  catch(e){ alert("No se pudo eliminar: "+e.message); }
+}
+function openProducto(id){
+  const p=id?CAT.find(x=>x.id===id):null;
+  $("p-id").value=p?p.id:""; $("p-nombre").value=p?p.nombre:""; $("p-sku").value=p?(p.sku||""):"";
+  $("p-cat").value=p?(p.categoria||""):""; $("p-prov").value=p?(p.proveedor||""):"";
+  $("p-costo").value=p?fmtN(p.costo||0):""; $("p-precio").value=p?fmtN(p.precio||0):"0"; $("p-img").value=p?(p.imagen||""):"";
+  $("dlg-pr-h").textContent=p?"Editar producto":"Nuevo producto";
+  dlgPr().showModal();
+}
+async function saveProducto(){
+  const nombre=$("p-nombre").value.trim(); if(!nombre){ alert("El nombre es obligatorio."); return; }
+  const datos={ nombre, sku:$("p-sku").value.trim(), categoria:$("p-cat").value.trim(),
+    costo:parseNum($("p-costo").value), precio:parseNum($("p-precio").value),
+    proveedor:$("p-prov").value.trim(), imagen:$("p-img").value.trim() };
+  const id=$("p-id").value;
+  try{
+    if(id){ await tUpdate("productos", id, datos); const p=CAT.find(x=>x.id===id); if(p) Object.assign(p, datos); }
+    else { const r=await tInsert("productos", datos); const saved=Array.isArray(r)?r[0]:r; CAT.push(saved); }
+    dlgPr().close(); CAT.sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||"")); renderProductos(); refrescarCatUI();
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+/* Refresca las categorías del builder y su lista si está abierto */
+function refrescarCatUI(){
+  const cats=[...new Set(CAT.map(p=>p.categoria).filter(Boolean))].sort();
+  const sel=$("b-prcat"); if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); sel.value=cur; }
+  if($("b-catlist")) renderCat();
+}
+/* CSV: exportar el catálogo de la empresa */
+function exportProductosCSV(){
+  const rows=[["Nombre","SKU","Categoria","Costo","Precio","Proveedor","Imagen"]]
+    .concat(CAT.map(p=>[p.nombre,p.sku||"",p.categoria||"",p.costo||0,p.precio||0,p.proveedor||"",p.imagen||""]));
+  const csv=rows.map(r=>r.map(v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,﻿"+encodeURIComponent(csv);
+  a.download="catalogo_"+((MT.empresa&&MT.empresa.nombre)||"empresa")+".csv"; a.click();
+}
+/* CSV: importar (AGREGA, no borra). Espera cabecera con Nombre/SKU/Categoria/Costo/Precio/Proveedor */
+function importProductosCSV(ev){
+  const f=ev.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=async ()=>{
+    try{
+      const rows=parseCSV(String(rd.result)); if(rows.length<2){ alert("CSV vacío."); ev.target.value=""; return; }
+      const head=rows[0].map(h=>h.trim().toLowerCase());
+      const ix=n=>head.findIndex(h=>h===n);
+      const iN=ix("nombre"), iS=ix("sku"), iC=ix("categoria"), iCo=ix("costo"), iP=ix("precio"), iPr=ix("proveedor"), iI=ix("imagen");
+      if(iN<0){ alert("El CSV debe tener una columna 'Nombre'."); ev.target.value=""; return; }
+      const nuevos=rows.slice(1).filter(r=>r[iN]&&r[iN].trim()).map(r=>({
+        nombre:r[iN].trim(), sku:iS>=0?(r[iS]||"").trim():"", categoria:iC>=0?(r[iC]||"").trim():"",
+        costo:iCo>=0?parseNum(r[iCo]):0, precio:iP>=0?parseNum(r[iP]):0,
+        proveedor:iPr>=0?(r[iPr]||"").trim():"", imagen:iI>=0?(r[iI]||"").trim():"" }));
+      if(!nuevos.length){ alert("No se encontraron filas."); ev.target.value=""; return; }
+      // inserta en lotes de 200
+      for(let i=0;i<nuevos.length;i+=200){
+        const lote=nuevos.slice(i,i+200).map(p=>({...p, empresa_id:empId()}));
+        await rest("productos",{method:"POST",headers:{...H(),Prefer:"return=minimal"},body:JSON.stringify(lote)});
+      }
+      CAT=await tSel("productos","select=*&deleted=eq.false&order=nombre"); renderProductos(); refrescarCatUI();
+      alert("Importados "+nuevos.length+" productos (agregados, sin borrar los existentes).");
+    }catch(e){ alert("Error importando CSV: "+e.message); }
+    ev.target.value="";
+  };
+  rd.readAsText(f);
+}
+/* Parser CSV mínimo con comillas */
+function parseCSV(text){
+  const rows=[]; let row=[], cur="", q=false;
+  text=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"') q=true; else if(c===",") { row.push(cur); cur=""; } else if(c==="\n"){ row.push(cur); rows.push(row); row=[]; cur=""; } else cur+=c; }
+  }
+  if(cur.length||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.length && r.some(x=>x!==""));
+}
+
+/* ============================================================================
+   PROVEEDORES (por empresa)
+============================================================================ */
+const dlgPv = () => document.getElementById("dlg-pv");
+function renderProveedores(){
+  const q=($("pv-q").value||"").toLowerCase();
+  const list=PROV.filter(p=>(p.nombre||"").toLowerCase().includes(q));
+  $("pv-body").innerHTML = list.map(p=>`<tr>
+    <td>${esc(p.nombre||"")}</td><td>${esc(p.rut||"")}</td><td>${esc(p.contacto||"")}</td><td>${esc(p.telefono||"")}</td><td>${esc(p.email||"")}</td>
+    <td><button class="btn-sec" onclick="openProveedor('${p.id}')">✎</button> <button class="btn-red" onclick="delProveedor('${p.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">Sin proveedores.</td></tr>`;
+}
+function openProveedor(id){
+  const p=id?PROV.find(x=>x.id===id):null;
+  $("v-id").value=p?p.id:""; $("v-nombre").value=p?p.nombre:""; $("v-rut").value=p?(p.rut||""):"";
+  $("v-contacto").value=p?(p.contacto||""):""; $("v-tel").value=p?(p.telefono||""):""; $("v-email").value=p?(p.email||""):"";
+  $("dlg-pv-h").textContent=p?"Editar proveedor":"Nuevo proveedor";
+  dlgPv().showModal();
+}
+async function saveProveedor(){
+  const nombre=$("v-nombre").value.trim(); if(!nombre){ alert("El nombre es obligatorio."); return; }
+  const datos={ nombre, rut:$("v-rut").value.trim(), contacto:$("v-contacto").value.trim(), telefono:$("v-tel").value.trim(), email:$("v-email").value.trim() };
+  const id=$("v-id").value;
+  try{
+    if(id){ await tUpdate("proveedores", id, datos); const p=PROV.find(x=>x.id===id); if(p) Object.assign(p, datos); }
+    else { const r=await tInsert("proveedores", datos); const saved=Array.isArray(r)?r[0]:r; PROV.push(saved); }
+    dlgPv().close(); PROV.sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||"")); renderProveedores();
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+}
+async function delProveedor(id){
+  if(!confirm("¿Eliminar proveedor?")) return;
+  try{ await tDelete("proveedores", id); PROV=PROV.filter(x=>x.id!==id); renderProveedores(); }
+  catch(e){ alert("No se pudo eliminar: "+e.message); }
+}
+
+/* ===== utilidades ===== */
+function kpi(v,l){ return `<div class="box"><b>${v}</b><span>${l}</span></div>`; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+/* ============================================================================
+   CONFIGURACIÓN DE LA EMPRESA (super_admin / admin_empresa)
+============================================================================ */
+function puedeConfig(){ return ["super_admin","admin_empresa"].includes(MT.rol); }
+function renderConfig(){
+  if(!puedeConfig()){ if($("s-config")) $("s-config").innerHTML='<div class="card"><h2>⚙️ Configuración</h2><p class="muted">No tienes permiso para editar la configuración de esta empresa.</p></div>'; return; }
+  const c = MT.config||{}, e = MT.empresaFull||{};
+  if($("cf-emp")) $("cf-emp").textContent = (MT.empresa&&MT.empresa.nombre)||"";
+  const set=(id,v)=>{ const el=$(id); if(el) el.value=(v==null?"":v); };
+  set("cf-razon", c.razon_social || e.nombre || "");
+  set("cf-rut", e.rut || "");
+  set("cf-direccion", c.direccion || "");
+  set("cf-telefono", c.telefono || "");
+  set("cf-emails", c.emails || "");
+  set("cf-web", c.web || "");
+  set("cf-tienda", c.tienda || "");
+  set("cf-moneda", c.moneda || "CLP");
+  set("cf-iva", (c.iva!=null? c.iva : 19));
+  set("cf-pct", (c.pct_venta!=null? c.pct_venta : 35));
+  set("cf-apps", c.apps_script_url || "");
+  set("cf-mp", c.mp_ticket || "");
+  set("cf-ca", c.ca_ticket || "");
+  set("cf-logo", e.logo_url || "");
+  set("cf-bancos", Array.isArray(c.bancos)? c.bancos.join("\n") : (c.bancos||""));
+  set("cf-firmas", Array.isArray(c.firmas)? c.firmas.map(f=>[f.nombre||"",f.cargo||"",f.tel||""].join(" | ")).join("\n") : "");
+  if($("cf-msg")) $("cf-msg").textContent="";
+}
+async function guardarConfig(){
+  if(!puedeConfig()){ if($("cf-msg")) $("cf-msg").textContent="No tienes permiso."; return; }
+  const val=id=>($(id)?$(id).value:"");
+  const num=v=>{ const n=Number(String(v).replace(",", ".")); return isFinite(n)?n:0; };
+  const bancos = val("cf-bancos").split("\n").map(s=>s.trim()).filter(Boolean);
+  const firmas = val("cf-firmas").split("\n").map(s=>s.trim()).filter(Boolean).map(l=>{
+     const p=l.split("|").map(x=>x.trim()); return {nombre:p[0]||"", cargo:p[1]||"", tel:p[2]||""}; });
+  const config = Object.assign({}, MT.config||{}, {
+    razon_social: val("cf-razon").trim(),
+    direccion: val("cf-direccion").trim(),
+    telefono: val("cf-telefono").trim(),
+    emails: val("cf-emails").trim(),
+    web: val("cf-web").trim(),
+    tienda: val("cf-tienda").trim(),
+    moneda: val("cf-moneda").trim()||"CLP",
+    iva: num(val("cf-iva")),
+    pct_venta: num(val("cf-pct")),
+    apps_script_url: val("cf-apps").trim(),
+    mp_ticket: val("cf-mp").trim(),
+    ca_ticket: val("cf-ca").trim(),
+    bancos: bancos,
+    firmas: firmas
+  });
+  const patch = {
+    nombre: val("cf-razon").trim() || (MT.empresa&&MT.empresa.nombre) || "Empresa",
+    rut: val("cf-rut").trim() || null,
+    logo_url: val("cf-logo").trim() || null,
+    config: config
+  };
+  if($("cf-msg")){ $("cf-msg").style.color="#64748b"; $("cf-msg").textContent="Guardando…"; }
+  try{
+    await rest("empresas?id=eq."+empId(), {method:"PATCH", headers:{...H(), Prefer:"return=minimal"}, body:JSON.stringify(patch)});
+    MT.config = config;
+    MT.empresaFull = Object.assign({}, MT.empresaFull, {nombre:patch.nombre, rut:patch.rut, logo_url:patch.logo_url, config:config});
+    if(MT.empresa) MT.empresa.nombre = patch.nombre;
+    const opt = $("emp-select") && $("emp-select").selectedOptions[0]; if(opt) opt.textContent = patch.nombre;
+    if($("cf-msg")){ $("cf-msg").style.color="var(--verde,#16a34a)"; $("cf-msg").textContent="✅ Configuración guardada."; }
+  }catch(e){ if($("cf-msg")){ $("cf-msg").style.color="var(--rojo,#dc2626)"; $("cf-msg").textContent="Error al guardar: "+((e&&e.message)||e); } }
+}
+
+/* ============================================================================
+   ÓRDENES DE COMPRA  (nacen al aprobar una cotización)
+============================================================================ */
+let OC_EDIT=null, NOTA_SRC=null, EDIT_NOTA=null;
+async function crearOCdesdeCotiz(q, num){
+  const qq={items:q.items||[], pct:Number(q.pct)||0, despacho:Number(q.despacho)||0, despMode:(q.data&&q.data.despMode)||"pct"};
+  const t=quoteTotals(qq);
+  const items=(q.items||[]).map(it=>{ const cant=Number(it.cantidad)||1, pv=qUnit(qq,it);
+    return {nombre:it.nombre, sku:it.sku||"", proveedor:it.proveedor||"", cantidad:cant, costo:Number(it.costo)||0, precio_venta:pv, total:pv*cant, detalle:it.detalle||""}; });
+  const cli=CLIENTES.find(c=>c.id===q.cliente_id);
+  const row={ numero:num, cotizacion_id:q.id, cliente_id:q.cliente_id||null, cliente_nombre:(cli&&cli.nombre)||"",
+              items, total:t.total, estado:"pendiente", data:{neto:t.neto, iva:t.iva, total:t.total, cotiz_numero:q.numero||""} };
+  const ex=await tSel("ordenes_compra","cotizacion_id=eq."+q.id+"&select=id");
+  if(ex && ex[0]) await tUpdate("ordenes_compra", ex[0].id, row); else await tInsert("ordenes_compra", row);
+}
+async function renderOrdenes(){
+  const term=($("oc-q")?$("oc-q").value:"").toLowerCase();
+  let list; try{ list=await tSel("ordenes_compra","select=*&order=created_at.desc"); }catch(e){ $("oc-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  let notaMap={}; try{ (await tSel("notas_pedido","select=numero,oc_id")).forEach(n=>{ if(n.oc_id) notaMap[n.oc_id]=n.numero; }); }catch(_){}
+  list=list.filter(o=>!term || (o.numero||"").toLowerCase().includes(term) || (o.cliente_nombre||"").toLowerCase().includes(term));
+  $("oc-body").innerHTML=list.map(o=>`<tr>
+      <td>${esc(o.numero||"")}</td>
+      <td><span class="mini">${esc((o.data&&o.data.cotiz_numero)||"—")} ➜ <b>${esc(o.numero||"")}</b> ➜ ${notaMap[o.id]?('<b style="color:var(--verde)">'+esc(notaMap[o.id])+'</b>'):'<span style="color:#94a3b8">Nota pend.</span>'}</span></td>
+      <td>${esc(o.cliente_nombre||"—")}</td>
+      <td class="right">${money(o.total)}</td><td>${badge(o.estado)}</td>
+      <td><button class="btn-sec" onclick="editOC('${o.id}')">Editar</button>
+          <button class="btn-sec" onclick="abrirGenerarNota('${o.id}')">Nota pedido</button>
+          <button class="btn-sec" onclick="pdfOC('${o.id}')">PDF</button>
+          <button class="btn-blue" onclick="pdfSecuencia('${o.id}')">📑 Secuencia PDF</button>
+          <button class="btn-red" onclick="delOC('${o.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">Aún no hay órdenes de compra. Se crean al aprobar una cotización.</td></tr>`;
+}
+async function fetchOC(id){ const r=await tSel("ordenes_compra","id=eq."+id+"&select=*"); return r[0]; }
+async function editOC(id){
+  const o=await fetchOC(id); if(!o) return; OC_EDIT=o;
+  $("oc-e-num").value=o.numero||""; $("oc-e-cli").value=o.cliente_nombre||"";
+  $("oc-e-body").innerHTML=(o.items||[]).map((it,i)=>`<tr>
+     <td>${esc(it.nombre)}</td><td class="right" style="width:60px">${it.cantidad}</td>
+     <td style="width:130px"><input type="text" inputmode="decimal" value="${Math.round(it.precio_venta||0)}" onchange="ocSetPrecio(${i},this.value)"></td>
+     <td class="right" id="oc-lt-${i}">${money((it.precio_venta||0)*it.cantidad)}</td></tr>`).join("");
+  ocRecalc(); $("dlg-oc").showModal();
+}
+function ocSetPrecio(i,v){ if(OC_EDIT&&OC_EDIT.items[i]){ OC_EDIT.items[i].precio_venta=parseNum(v); OC_EDIT.items[i].total=OC_EDIT.items[i].precio_venta*OC_EDIT.items[i].cantidad; $("oc-lt-"+i).textContent=money(OC_EDIT.items[i].total); ocRecalc(); } }
+function ocRecalc(){ if(!OC_EDIT) return; const neto=(OC_EDIT.items||[]).reduce((a,it)=>a+(it.total||0),0), iva=Math.round(neto*ivaPct()/100); OC_EDIT._neto=neto; OC_EDIT._iva=iva; OC_EDIT._total=neto+iva; $("oc-e-total").textContent=money(neto+iva); }
+async function guardarOC(){
+  if(!OC_EDIT) return; const num=$("oc-e-num").value.trim()||OC_EDIT.numero;
+  try{ await tUpdate("ordenes_compra", OC_EDIT.id, { numero:num, items:OC_EDIT.items, total:OC_EDIT._total, data:Object.assign({}, OC_EDIT.data, {neto:OC_EDIT._neto, iva:OC_EDIT._iva, total:OC_EDIT._total}) });
+    $("dlg-oc").close(); renderOrdenes(); }
+  catch(e){ alert("No se pudo guardar la OC: "+e.message); }
+}
+async function delOC(id){ if(!confirm("¿Eliminar esta orden de compra?")) return; try{ await tDelete("ordenes_compra", id); renderOrdenes(); }catch(e){ alert(e.message); } }
+function pdfOC(id){ fetchOC(id).then(o=>{ if(o) pdfDocOC(o); }); }
+async function pdfDocOC(o){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  const y=await pdfHeader(doc, H, "ORDEN DE COMPRA", ["N°: "+(o.numero||""),"Fecha: "+hoy()]);
+  doc.setFontSize(9); doc.setTextColor(30); doc.text("Cliente: "+(o.cliente_nombre||""),14,y);
+  const body=(o.items||[]).map(it=>[it.nombre, it.cantidad, money(it.precio_venta), money((it.precio_venta||0)*it.cantidad)]);
+  const neto=(o.items||[]).reduce((a,it)=>a+(it.precio_venta||0)*it.cantidad,0), iva=Math.round(neto*ivaPct()/100);
+  doc.autoTable({ startY:y+4, head:[["Producto","Cant.","Precio venta","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Subtotal",money(neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(neto+iva)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
+  pdfFooter(doc,H); doc.save((o.numero||"OC")+".pdf");
+}
+/* --- Respaldo interno: envía por correo (vía Apps Script) lo que hace el vendedor --- */
+function respaldoInterno(accion, extra){
+  const url=(MT.config&&MT.config.apps_script_url)||""; if(!url) return Promise.resolve();
+  const payload=Object.assign({ accion, vendedor:(MT.perfil&&MT.perfil.nombre)||(MT.user&&MT.user.email)||"",
+    empresa:(MT.empresa&&MT.empresa.nombre)||"", emails:(MT.config&&MT.config.emails)||"", ts:new Date().toISOString() }, extra||{});
+  return fetch(url+(url.includes("?")?"&":"?")+"action=respaldo", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)}).catch(()=>{});
+}
+/* --- PDF ÚNICO de la secuencia: Cotización + Orden de compra + Nota de pedido --- */
+async function pdfSecuencia(ocId){
+  const oc=await fetchOC(ocId); if(!oc){ alert("No se encontró la orden de compra."); return; }
+  let q=null; if(oc.cotizacion_id){ try{ q=await fetchQuote(oc.cotizacion_id); }catch(_){} }
+  let nota=null; try{ const ns=await tSel("notas_pedido","oc_id=eq."+oc.id+"&select=*"); nota=ns&&ns[0]; }catch(_){}
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  let y=await pdfHeader(doc, H, "SECUENCIA DE PEDIDO", ["Fecha: "+hoy()]);
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(30);
+  doc.text("Cliente: "+(oc.cliente_nombre||"—"),14,y);
+  doc.text("Trazabilidad:  "+((oc.data&&oc.data.cotiz_numero)||"—")+"  ➜  "+(oc.numero||"—")+"  ➜  "+((nota&&nota.numero)||"(sin nota)"),14,y+5);
+  y+=12;
+  const sec=(n,txt)=>{ if(y>250){ doc.addPage(); y=20; } doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.setTextColor(22,50,79); doc.text(n+") "+txt,14,y); };
+  const tabla=(head,body)=>{ doc.autoTable({startY:y+2,head:[head],body,styles:{fontSize:8},headStyles:{fillColor:[22,50,79]},columnStyles:{1:{halign:"center",cellWidth:16},2:{halign:"right",cellWidth:30},3:{halign:"right",cellWidth:30}}}); y=doc.lastAutoTable.finalY+8; };
+  // 1) Cotización
+  sec(1,"COTIZACIÓN "+((q&&q.numero)||(oc.data&&oc.data.cotiz_numero)||""));
+  if(q){ const qq={items:q.items||[],pct:Number(q.pct)||0,despacho:Number(q.despacho)||0,despMode:(q.data&&q.data.despMode)||"pct"};
+    tabla(["Producto","Cant.","Precio","Total"], (q.items||[]).map(it=>{ const c=Number(it.cantidad)||1, pv=qUnit(qq,it); return [it.nombre,c,money(pv),money(pv*c)]; }));
+  } else { doc.setFont(undefined,'normal'); doc.setFontSize(8); doc.setTextColor(90); doc.text("(cotización no disponible)",14,y+6); y+=12; }
+  // 2) Orden de compra
+  sec(2,"ORDEN DE COMPRA "+(oc.numero||""));
+  tabla(["Producto","Cant.","Precio venta","Total"], (oc.items||[]).map(it=>[it.nombre,it.cantidad,money(it.precio_venta),money((it.precio_venta||0)*it.cantidad)]));
+  // 3) Nota de pedido
+  sec(3,"NOTA DE PEDIDO "+((nota&&nota.numero)||"(pendiente)"));
+  if(nota){ tabla(["Producto","Cant.","Costo neto","Total"], (nota.items||[]).map(it=>[it.nombre,it.cantidad,money(it.costo),money((it.costo||0)*it.cantidad)])); }
+  else { doc.setFont(undefined,'normal'); doc.setFontSize(8); doc.setTextColor(90); doc.text("Aún no se ha generado la nota de pedido para esta orden.",14,y+6); }
+  pdfFooter(doc,H); doc.save("SECUENCIA-"+(oc.numero||"OC")+".pdf");
+}
+function provOptionsHTML(setOC){
+  const byName=new Set(PROV.map(p=>(p.nombre||"").toLowerCase()));
+  let opts = PROV.slice().sort((a,b)=>(a.nombre||"").localeCompare(b.nombre||""))
+    .map(p=>`<option value="id:${p.id}">${esc(p.nombre)}</option>`);
+  (setOC||[]).forEach(n=>{ if(n && !byName.has(n.toLowerCase())) opts.push(`<option value="name:${esc(n)}">${esc(n)} (de la OC)</option>`); });
+  opts.push('<option value="__nuevo__">➕ Crear nuevo proveedor…</option>');
+  return opts.join("");
+}
+function notaProvChange(){ const v=$("nota-prov").value; $("nota-nuevo").classList.toggle("hidden", v!=="__nuevo__"); }
+function abrirGenerarNota(ocId){
+  fetchOC(ocId).then(o=>{ if(!o) return; NOTA_SRC=o; EDIT_NOTA=null;
+    const setP=[...new Set((o.items||[]).map(it=>it.proveedor).filter(Boolean))];
+    $("nota-prov").innerHTML = provOptionsHTML(setP);
+    if(setP.length===1){ const m=PROV.find(p=>(p.nombre||"").toLowerCase()===setP[0].toLowerCase()); $("nota-prov").value = m?("id:"+m.id):("name:"+setP[0]); }
+    $("nota-items").innerHTML = ['<option value="__all__">Todos los productos</option>'].concat(setP.map(n=>`<option value="name:${esc(n)}">Solo de ${esc(n)}</option>`)).join("");
+    $("nota-items-wrap").classList.remove("hidden");
+    ["nota-nuevo-nombre","nota-nuevo-rut","nota-nuevo-email"].forEach(id=>{ if($(id)) $(id).value=""; });
+    notaProvChange(); $("dlg-nota").showModal();
+  });
+}
+function editNotaProv(id){
+  fetchNota(id).then(n=>{ if(!n) return; EDIT_NOTA=n; NOTA_SRC=null;
+    $("nota-prov").innerHTML = provOptionsHTML([]);
+    if(n.proveedor_id){ $("nota-prov").value="id:"+n.proveedor_id; }
+    else if(n.proveedor_nombre){ const m=PROV.find(p=>(p.nombre||"").toLowerCase()===(n.proveedor_nombre||"").toLowerCase()); if(m) $("nota-prov").value="id:"+m.id; }
+    $("nota-items-wrap").classList.add("hidden");   // al editar solo se reasigna el proveedor
+    ["nota-nuevo-nombre","nota-nuevo-rut","nota-nuevo-email"].forEach(id2=>{ if($(id2)) $(id2).value=""; });
+    notaProvChange(); $("dlg-nota").showModal();
+  });
+}
+async function resolverProvNota(){
+  const v=$("nota-prov").value;
+  if(v==="__nuevo__"){
+    const nombre=($("nota-nuevo-nombre").value||"").trim(); if(!nombre){ alert("Ingresa el nombre del nuevo proveedor."); return null; }
+    try{ const r=await tInsert("proveedores", {nombre, rut:($("nota-nuevo-rut").value||"").trim(), email:($("nota-nuevo-email").value||"").trim()});
+      const saved=Array.isArray(r)?r[0]:r; PROV.push(saved); return {id:saved.id, nombre:saved.nombre}; }
+    catch(e){ alert("No se pudo crear el proveedor: "+e.message); return null; }
+  }
+  if(v.indexOf("id:")===0){ const p=PROV.find(x=>x.id===v.slice(3)); return p?{id:p.id, nombre:p.nombre}:null; }
+  if(v.indexOf("name:")===0){ const nm=v.slice(5); const p=PROV.find(x=>(x.nombre||"").toLowerCase()===nm.toLowerCase()); return {id:p?p.id:null, nombre:nm}; }
+  return null;
+}
+async function generarNotaPedido(){
+  const prov=await resolverProvNota(); if(!prov) return;
+  if(EDIT_NOTA){
+    try{ await tUpdate("notas_pedido", EDIT_NOTA.id, {proveedor_id:prov.id||null, proveedor_nombre:prov.nombre});
+      $("dlg-nota").close(); EDIT_NOTA=null; alert("Proveedor de la nota actualizado a "+prov.nombre+"."); renderNotas(); }
+    catch(e){ alert("No se pudo actualizar: "+e.message); }
+    return;
+  }
+  if(!NOTA_SRC) return;
+  const filtro=$("nota-items")?$("nota-items").value:"__all__";
+  let items=(NOTA_SRC.items||[]);
+  if(filtro && filtro.indexOf("name:")===0){ const nm=filtro.slice(5); items=items.filter(it=>(it.proveedor||"")===nm); }
+  items=items.map(it=>({nombre:it.nombre, sku:it.sku||"", cantidad:it.cantidad, costo:Number(it.costo)||0, total:(Number(it.costo)||0)*it.cantidad}));
+  if(!items.length){ alert("No hay productos para incluir en la nota."); return; }
+  const costo_neto=items.reduce((a,it)=>a+it.total,0), total=Math.round(costo_neto*(1+ivaPct()/100));
+  try{
+    const num=await siguienteNumero("nota_pedido","NP");
+    await tInsert("notas_pedido", { numero:num, proveedor_id:prov.id||null, proveedor_nombre:prov.nombre,
+       cotizacion_id:NOTA_SRC.cotizacion_id||null, oc_id:NOTA_SRC.id, items, costo_neto, total, estado:"pendiente",
+       data:{ oc_numero:NOTA_SRC.numero||"", cotiz_numero:(NOTA_SRC.data&&NOTA_SRC.data.cotiz_numero)||"" } });
+    $("dlg-nota").close(); alert("🧾 Nota de pedido "+num+" creada para "+prov.nombre+"."); go("notas");
+  }catch(e){ alert("No se pudo crear la nota: "+e.message); }
+}
+
+/* ============================================================================
+   NOTAS DE PEDIDO  (al proveedor, con costos + IVA)
+============================================================================ */
+async function renderNotas(){
+  const est=$("np-estado")?$("np-estado").value:""; const term=($("np-q")?$("np-q").value:"").toLowerCase();
+  let list; try{ list=await tSel("notas_pedido","select=*&order=created_at.desc"); }catch(e){ $("np-body").innerHTML=`<tr><td colspan="7" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  list=list.filter(n=>(!est||n.estado===est) && (!term || (n.numero||"").toLowerCase().includes(term) || (n.proveedor_nombre||"").toLowerCase().includes(term)));
+  $("np-body").innerHTML=list.map(n=>`<tr>
+     <td>${esc(n.numero||"")}${(n.data&&(n.data.cotiz_numero||n.data.oc_numero))?`<div class="mini">${esc(n.data.cotiz_numero||"—")} ➜ ${esc(n.data.oc_numero||"—")} ➜ <b>${esc(n.numero||"")}</b></div>`:""}</td><td>${esc((n.created_at||"").slice(0,10))}</td><td>${esc(n.proveedor_nombre||"—")}</td>
+     <td class="right">${money(n.costo_neto)}</td><td class="right">${money(n.total)}</td><td>${badge(n.estado)}</td>
+     <td><select onchange="notaEstado('${n.id}',this.value)" style="font-size:11px">
+        ${["pendiente","enviada","recibida"].map(s=>`<option value="${s}"${n.estado===s?" selected":""}>${s}</option>`).join("")}</select>
+        <button class="btn-sec" onclick="editNotaProv('${n.id}')">Editar</button>
+        <button class="btn-sec" onclick="pdfNota('${n.id}')">PDF</button>
+        <button class="btn-red" onclick="delNota('${n.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">Aún no hay notas de pedido. Genérala desde una Orden de compra.</td></tr>`;
+}
+async function fetchNota(id){ const r=await tSel("notas_pedido","id=eq."+id+"&select=*"); return r[0]; }
+async function notaEstado(id,v){ try{ await tUpdate("notas_pedido", id, {estado:v}); renderNotas(); }catch(e){ alert(e.message); } }
+async function delNota(id){ if(!confirm("¿Eliminar esta nota de pedido?")) return; try{ await tDelete("notas_pedido", id); renderNotas(); }catch(e){ alert(e.message); } }
+function pdfNota(id){ fetchNota(id).then(n=>{ if(n) pdfDocNota(n); }); }
+async function pdfDocNota(n){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  const y=await pdfHeader(doc, H, "NOTA DE PEDIDO", ["N°: "+(n.numero||""),"Fecha: "+((n.created_at||hoy()).slice(0,10))]);
+  doc.setFontSize(9); doc.setTextColor(30); doc.text("Proveedor: "+(n.proveedor_nombre||""),14,y);
+  const body=(n.items||[]).map(it=>[it.nombre, it.cantidad, money(it.costo), money((it.costo||0)*it.cantidad)]);
+  const iva=Math.round((Number(n.costo_neto)||0)*ivaPct()/100);
+  doc.autoTable({ startY:y+4, head:[["Producto","Cant.","Costo neto","Total"]], body, styles:{fontSize:9}, headStyles:{fillColor:[22,50,79]}, columnStyles:{1:{halign:"center",cellWidth:18},2:{halign:"right",cellWidth:32},3:{halign:"right",cellWidth:32}} });
+  doc.autoTable({ startY:doc.lastAutoTable.finalY+4, theme:"plain", margin:{left:120}, styles:{fontSize:9}, body:[["Costo neto",money(n.costo_neto)],["IVA "+ivaPct()+"%",money(iva)],["TOTAL",money(n.total)]], columnStyles:{0:{fontStyle:'bold'},1:{halign:"right"}} });
+  pdfFooter(doc,H); doc.save((n.numero||"NP")+".pdf");
+}
+
+/* ============================================================================
+   INVENTARIO (stock por producto)
+============================================================================ */
+let INV=[];
+function descargaCSV(rows,nombre){ const csv=rows.map(r=>r.map(c=>{ c=String(c==null?"":c); return /[",\n]/.test(c)?('"'+c.replace(/"/g,'""')+'"'):c; }).join(",")).join("\n");
+  const b=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=nombre; a.click(); }
+async function renderInventario(){
+  const term=($("inv-q")?$("inv-q").value:"").toLowerCase(); const umbral=Number($("inv-umbral")?$("inv-umbral").value:5)||5;
+  try{ INV=await tSel("productos","select=id,nombre,categoria,proveedor,stock,stock_min&deleted=eq.false&order=nombre"); }
+  catch(e){ $("inv-body").innerHTML=`<tr><td colspan="6" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const list=INV.filter(p=>!term || (p.nombre||"").toLowerCase().includes(term) || (p.categoria||"").toLowerCase().includes(term) || (p.proveedor||"").toLowerCase().includes(term));
+  $("inv-body").innerHTML=list.map(p=>{ const st=Number(p.stock)||0; const min=Number(p.stock_min)||umbral;
+    const estado = st<=0 ? '<span class="est r">sin stock</span>' : (st<=min ? '<span class="est p">bajo</span>' : '<span class="est a">ok</span>');
+    return `<tr><td>${esc(p.nombre)}</td><td>${esc(p.categoria||"")}</td><td>${esc(p.proveedor||"")}</td>
+      <td style="width:80px"><input type="number" value="${st}" onchange="invSet('${p.id}','stock',this.value)"></td>
+      <td style="width:80px"><input type="number" value="${Number(p.stock_min)||0}" onchange="invSet('${p.id}','stock_min',this.value)"></td>
+      <td>${estado}</td></tr>`; }).join("") || `<tr><td colspan="6" class="muted">Sin productos.</td></tr>`;
+  if($("inv-count")) $("inv-count").textContent=list.length+" productos";
+}
+async function invSet(id,field,v){ const patch={}; patch[field]=parseInt(v)||0; try{ await tUpdate("productos", id, patch);
+  const p=INV.find(x=>x.id===id); if(p) p[field]=patch[field]; renderInventario(); }catch(e){ alert(e.message); } }
+function exportInventarioCSV(){ descargaCSV([["Producto","Categoria","Proveedor","Stock","StockMin"]].concat(INV.map(p=>[p.nombre,p.categoria||"",p.proveedor||"",p.stock||0,p.stock_min||0])),"inventario.csv"); }
+
+/* ============================================================================
+   RESÚMENES (por vendedor / proveedor / mensual)
+============================================================================ */
+let RES_COTS=[], RES_TAB="vendedor";
+function cotizTotal(x){ if(x.data && x.data.total!=null) return Number(x.data.total)||0; try{ return quoteTotals({items:x.items||[], pct:Number(x.pct)||0, despacho:Number(x.despacho)||0, despMode:(x.data&&x.data.despMode)||"pct"}).total; }catch(_){ return 0; } }
+function cotizNeto(x){ if(x.data && x.data.neto!=null) return Number(x.data.neto)||0; try{ return quoteTotals({items:x.items||[], pct:Number(x.pct)||0, despacho:Number(x.despacho)||0, despMode:(x.data&&x.data.despMode)||"pct"}).neto; }catch(_){ return 0; } }
+function cotizCosto(x){ return (x.items||[]).reduce((a,it)=>a+(Number(it.costo)||0)*(Number(it.cantidad)||1),0); }
+async function renderResumenes(){
+  try{ RES_COTS=await tSel("cotizaciones","select=*&order=fecha.desc"); }catch(e){ $("res-body").innerHTML=`<tr><td class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  pintarResumen();
+}
+function resTab(t){ RES_TAB=t; document.querySelectorAll("#res-tabs button").forEach(b=>b.classList.toggle("active", b.dataset.t===t)); pintarResumen(); }
+function pintarResumen(){
+  const d1=$("res-desde")?$("res-desde").value:"", d2=$("res-hasta")?$("res-hasta").value:"";
+  const cots=(RES_COTS||[]).filter(x=>{ const f=x.fecha||((x.created_at||"").slice(0,10)); return (!d1||f>=d1)&&(!d2||f<=d2); });
+  if(RES_TAB==="proveedor") resProveedor(cots); else if(RES_TAB==="mensual") resMensual(cots); else if(RES_TAB==="detalle") resDetalle(cots); else resVendedor(cots);
+}
+function resDetalle(cots){
+  const byId={}; (CLIENTES||[]).forEach(c=>byId[c.id]=c);
+  const rows=cots.slice().sort((a,b)=>((b.fecha||b.created_at||"")+"").localeCompare((a.fecha||a.created_at||"")+""));
+  $("res-head").innerHTML="<tr><th>Fecha</th><th>N°</th><th>Vendedor</th><th>Cliente</th><th>Estado</th><th class='right'>Monto</th></tr>";
+  $("res-body").innerHTML=rows.map(x=>{ const cn=(byId[x.cliente_id]&&byId[x.cliente_id].nombre)||"—";
+    return `<tr><td>${esc(x.fecha||(x.created_at||"").slice(0,10))}</td><td>${esc(x.numero||"")}</td><td><b>${esc(x.vendedor_name||"—")}</b></td><td>${esc(cn)}</td><td>${badge(x.estado)}</td><td class="right">${money(cotizTotal(x))}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">Sin ventas en el rango.</td></tr>`;
+}
+/* --- Exportes del Resumen (leen la tabla visible: incluye el vendedor) --- */
+function resRows(){
+  const heads=[...document.querySelectorAll("#res-head th")].map(th=>th.textContent.trim());
+  const rows=[...document.querySelectorAll("#res-body tr")].map(tr=>[...tr.children].map(td=>td.textContent.trim())).filter(r=>r.length===heads.length);
+  return {heads, rows};
+}
+function resTitulo(){ return RES_TAB==='vendedor'?'POR VENDEDOR':RES_TAB==='detalle'?'DETALLE DE VENTAS':RES_TAB==='proveedor'?'POR PROVEEDOR':'MENSUAL'; }
+function exportResumenCSV(){
+  const {heads,rows}=resRows(); if(!rows.length){ alert("Nada que exportar en esta vista."); return; }
+  const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const csv=[heads.map(q).join(",")].concat(rows.map(r=>r.map(q).join(","))).join("\n");
+  const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="resumen-"+RES_TAB+"-"+hoy()+".csv"; a.click();
+}
+async function exportResumenPDF(){
+  const {heads,rows}=resRows(); if(!rows.length){ alert("Nada que exportar en esta vista."); return; }
+  const { jsPDF }=window.jspdf; const doc=new jsPDF(); const H=empresaPDFHeader();
+  const d1=$("res-desde")?$("res-desde").value:"", d2=$("res-hasta")?$("res-hasta").value:"";
+  const y=await pdfHeader(doc, H, "RESUMEN · "+resTitulo(), [ (d1||d2)?("Rango: "+(d1||"…")+" a "+(d2||"…")):("Fecha: "+hoy()) ]);
+  doc.autoTable({ startY:y+2, head:[heads], body:rows, styles:{fontSize:8}, headStyles:{fillColor:[22,50,79]} });
+  pdfFooter(doc,H); doc.save("resumen-"+RES_TAB+".pdf");
+}
+function resVendedor(cots){
+  const g={}; cots.forEach(x=>{ const k=x.vendedor_name||"—"; g[k]=g[k]||{cotiz:0,monto:0,aprob:0,vendido:0};
+    g[k].cotiz++; g[k].monto+=cotizTotal(x); if(x.estado==="aprobada"){ g[k].aprob++; g[k].vendido+=cotizTotal(x); } });
+  $("res-head").innerHTML="<tr><th>Vendedor</th><th class='right'>Cotiz.</th><th class='right'>Monto cotizado</th><th class='right'>Aprobadas</th><th class='right'>Monto vendido</th><th class='right'>% conv.</th></tr>";
+  $("res-body").innerHTML=Object.entries(g).sort((a,b)=>b[1].monto-a[1].monto).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="right">${v.cotiz}</td><td class="right">${money(v.monto)}</td><td class="right">${v.aprob}</td><td class="right">${money(v.vendido)}</td><td class="right">${v.cotiz?Math.round(v.aprob/v.cotiz*100):0}%</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin datos en el rango.</td></tr>`;
+}
+function resProveedor(cots){
+  const g={};
+  cots.forEach(x=>{ const q={items:x.items||[], pct:Number(x.pct)||0, despacho:Number(x.despacho)||0, despMode:(x.data&&x.data.despMode)||"pct"};
+    (x.items||[]).forEach(it=>{ const k=it.proveedor||"—"; g[k]=g[k]||{set:new Set(),items:0,costo:0,venta:0};
+      g[k].set.add(x.id); g[k].items+=(Number(it.cantidad)||1); g[k].costo+=(Number(it.costo)||0)*(Number(it.cantidad)||1);
+      try{ g[k].venta+=qUnit(q,it)*(Number(it.cantidad)||1); }catch(_){ } }); });
+  $("res-head").innerHTML="<tr><th>Proveedor</th><th class='right'>Cotiz.</th><th class='right'>Ítems</th><th class='right'>Costo</th><th class='right'>Venta</th><th class='right'>Ganancia</th></tr>";
+  $("res-body").innerHTML=Object.entries(g).sort((a,b)=>(b[1].venta-b[1].costo)-(a[1].venta-a[1].costo)).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="right">${v.set.size}</td><td class="right">${v.items}</td><td class="right">${money(v.costo)}</td><td class="right">${money(v.venta)}</td><td class="right">${money(v.venta-v.costo)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin datos.</td></tr>`;
+}
+function resMensual(cots){
+  const g={};
+  cots.forEach(x=>{ const f=(x.fecha||((x.created_at||"").slice(0,10))||""); const mes=f.slice(0,7)||"—"; g[mes]=g[mes]||{cotiz:0,costo:0,desp:0,venta:0};
+    g[mes].cotiz++; g[mes].costo+=cotizCosto(x); g[mes].desp+=Number(x.despacho)||0; g[mes].venta+=cotizNeto(x); });
+  $("res-head").innerHTML="<tr><th>Mes</th><th class='right'>Cotiz.</th><th class='right'>Costo</th><th class='right'>Despacho</th><th class='right'>Venta (neto)</th><th class='right'>Ganancia</th></tr>";
+  $("res-body").innerHTML=Object.entries(g).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="right">${v.cotiz}</td><td class="right">${money(v.costo)}</td><td class="right">${money(v.desp)}</td><td class="right">${money(v.venta)}</td><td class="right">${money(v.venta-v.costo-v.desp)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin datos.</td></tr>`;
+}
+
+/* ============================================================================
+   USUARIOS Y MEMBRESÍAS (super_admin / admin_empresa)
+============================================================================ */
+const ROLES_ASIG=["admin_empresa","supervisor","vendedor","solo_lectura"];
+function puedeUsuarios(){ return ["super_admin","admin_empresa"].includes(MT.rol); }
+function usEmpId(){ return ($("us-emp")&&$("us-emp").value) || (MT.empresa&&MT.empresa.id) || (EMPRESAS_DISP[0]&&EMPRESAS_DISP[0].id) || ""; }
+function usEmpNombre(){ const e=EMPRESAS_DISP.find(x=>x.id===usEmpId()); return (e&&e.nombre) || (MT.empresa&&MT.empresa.nombre) || "la empresa"; }
+function pobUsEmp(){ const s=$("us-emp"); if(!s) return; const cur=s.value;
+  s.innerHTML=(EMPRESAS_DISP||[]).map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("");
+  if(cur && EMPRESAS_DISP.some(e=>e.id===cur)) s.value=cur; else if(MT.empresa) s.value=MT.empresa.id;
+}
+function insMembresia(eid,row){ return rest("membresias", {method:"POST", headers:{...H(), Prefer:"return=representation"}, body:JSON.stringify({...row, empresa_id:eid})}); }
+function mbUpd(id,patch){ return rest("membresias?id=eq."+id+"&empresa_id=eq."+usEmpId(), {method:"PATCH", headers:{...H(), Prefer:"return=minimal"}, body:JSON.stringify(patch)}); }
+async function renderUsuarios(){
+  if(!puedeUsuarios()){ if($("us-body")) $("us-body").innerHTML='<tr><td colspan="4" class="muted">Sin permiso.</td></tr>'; return; }
+  pobUsEmp(); const eid=usEmpId();
+  if(!eid){ if($("us-body")) $("us-body").innerHTML='<tr><td colspan="4" class="muted">Elige una empresa.</td></tr>'; return; }
+  let list; try{ list=await rest("membresias?empresa_id=eq."+eid+"&select=id,rol,activo,usuario_id,perfiles(nombre,email)&order=created_at"); }
+  catch(e){ $("us-body").innerHTML=`<tr><td colspan="4" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  $("us-body").innerHTML=(list||[]).map(m=>{ const p=m.perfiles||{};
+    return `<tr>
+      <td>${esc(p.nombre||"(perfil no visible)")}</td>
+      <td>${esc(p.email||m.usuario_id)}</td>
+      <td><select onchange="usSetRol('${m.id}',this.value)" style="font-size:12px">${ROLES_ASIG.map(r=>`<option value="${r}"${m.rol===r?" selected":""}>${etiquetaRol(r)}</option>`).join("")}</select></td>
+      <td><label class="mini" style="margin-right:8px"><input type="checkbox" ${m.activo?"checked":""} onchange="usActivo('${m.id}',this.checked)"> activo</label>
+          <button class="btn-red" onclick="usQuitar('${m.id}')">Quitar</button></td></tr>`; }).join("")
+    || `<tr><td colspan="4" class="muted">Aún no hay usuarios en ${esc(usEmpNombre())}.</td></tr>`;
+}
+async function usSetRol(id,r){ try{ await mbUpd(id,{rol:r}); }catch(e){ alert(e.message); } }
+async function usActivo(id,v){ try{ await mbUpd(id,{activo:v}); }catch(e){ alert(e.message); } }
+async function usQuitar(id){ if(!confirm("¿Quitar el acceso de este usuario a "+usEmpNombre()+"?")) return;
+  try{ await rest("membresias?id=eq."+id+"&empresa_id=eq."+usEmpId(), {method:"DELETE", headers:{...H(), Prefer:"return=minimal"}}); renderUsuarios(); }catch(e){ alert(e.message); } }
+async function usAgregarExistente(){
+  const email=($("us-email2").value||"").trim().toLowerCase(); const rol=$("us-rol2").value;
+  if(!email){ alert("Ingresa el correo."); return; }
+  try{
+    const p=await rest("perfiles?email=eq."+encodeURIComponent(email)+"&select=id,nombre");
+    if(!p || !p.length){ alert("No encontré un usuario con ese correo. Usa «Crear y asignar», o pídele que se registre primero."); return; }
+    await insMembresia(usEmpId(), {usuario_id:p[0].id, rol, activo:true});
+    $("us-email2").value=""; renderUsuarios(); alert("Usuario asignado a "+usEmpNombre()+" como "+etiquetaRol(rol)+".");
+  }catch(e){ alert("No se pudo asignar (¿ya estaba en esa empresa?): "+e.message); }
+}
+async function usCrear(){
+  const email=($("us-email").value||"").trim().toLowerCase(); const pass=$("us-pass").value; const rol=$("us-rol").value;
+  if(!email || !pass){ alert("Correo y contraseña son obligatorios."); return; }
+  if(pass.length<6){ alert("La contraseña debe tener al menos 6 caracteres."); return; }
+  $("us-msg").style.color="#64748b"; $("us-msg").textContent="Creando…";
+  try{
+    const r=await fetch(SUPA_URL+"/auth/v1/signup", {method:"POST", headers:{apikey:SUPA_ANON,"Content-Type":"application/json"}, body:JSON.stringify({email, password:pass})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.msg||j.error_description||j.error||"No se pudo crear el usuario.");
+    const uid=(j.user&&j.user.id)||j.id;
+    if(!uid) throw new Error("Usuario creado; si el proyecto exige confirmar correo, confírmalo y luego asígnalo por correo.");
+    await new Promise(res=>setTimeout(res,700));
+    await insMembresia(usEmpId(), {usuario_id:uid, rol, activo:true});
+    $("us-email").value=""; $("us-pass").value=""; $("us-msg").style.color="var(--verde,#16a34a)"; $("us-msg").textContent="✅ Usuario creado y asignado a "+usEmpNombre()+" como "+etiquetaRol(rol)+".";
+    renderUsuarios();
+  }catch(e){ $("us-msg").style.color="var(--rojo,#dc2626)"; $("us-msg").textContent="Error: "+((e&&e.message)||e); }
+}
+
+/* ============================================================================
+   MERCADO PÚBLICO / COMPRA ÁGIL (oportunidades ChileCompra por empresa)
+============================================================================ */
+let MP_LIST=[]; const MP_ESTADOS=["pendiente","cotizada","postulada","ganada","perdida","descartada"];
+async function renderPorAprobar(){
+  const term=($("pa-q")?$("pa-q").value:"").toLowerCase();
+  let list; try{ list=await tSel("oportunidades","select=*&order=cierre.asc"); }catch(e){ $("pa-body").innerHTML=`<div class="muted">Error: ${esc(e.message)}</div>`; return; }
+  const rut=($("pa-rut")?$("pa-rut").value:"").toLowerCase(), reg=($("pa-region")?$("pa-region").value:"").toLowerCase();
+  list=list.filter(o=>['pendiente','cotizada'].includes(o.estado_int)
+    && !mpCerrada(o)   // no mostrar oportunidades ya cerradas
+    && (!term || (o.codigo||'').toLowerCase().includes(term) || (o.nombre||'').toLowerCase().includes(term) || (o.organismo||'').toLowerCase().includes(term))
+    && (!rut || (o.rut_organismo||'').toLowerCase().includes(rut))
+    && (!reg || (o.region||'').toLowerCase().includes(reg)));
+  if($("pa-count")) $("pa-count").textContent=list.length+" por aprobar";
+  $("pa-body").innerHTML = list.map(o=>`<div style="border:1px solid var(--linea);border-radius:10px;padding:12px;background:#fff">
+     <div class="mini" style="color:var(--azul);font-weight:700">${esc(o.codigo||"")}</div>
+     <div style="font-weight:700;margin:3px 0;font-size:13px">${esc((o.nombre||"").slice(0,90))}</div>
+     <div class="mini" style="margin-bottom:8px">Cierre: ${esc(o.cierre||"—")} · <span class="est ${o.estado_int==='cotizada'?'a':'p'}">${esc(o.estado_int)}</span></div>
+     <div style="display:flex;gap:6px;flex-wrap:wrap">
+       <button class="btn-sec" onclick="mpCrearCotiz('${o.id}')">✎ Cotizar</button>
+       <button class="btn-dark" onclick="paPostular('${o.id}')">Postular</button>
+       <button class="btn-gray" onclick="paDescartar('${o.id}')">Descartar</button>
+     </div></div>`).join("") || `<div class="muted" style="padding:10px">Nada por aprobar. Usa «Sincronizar» en Mercado Público para traer más.</div>`;
+}
+async function paDescartar(id){ if(!confirm("¿Descartar esta oportunidad?")) return; try{ await tUpdate("oportunidades", id, {estado_int:"descartada"}); renderPorAprobar(); }catch(e){ alert(e.message); } }
+async function paPostular(id){
+  const r=await tSel("oportunidades","id=eq."+id+"&select=codigo,nombre"); const o=r[0]||{}; const cod=o.codigo||"";
+  try{ await tUpdate("oportunidades", id, {estado_int:"postulada"}); }catch(_){}
+  await respaldoInterno("postula_compra_agil", {codigo:cod, nombre:o.nombre||""});
+  window.open(mpUrl(cod), "_blank");
+  renderPorAprobar();
+  alert("Marcada como postulada y respaldo interno enviado por correo (vendedor + oportunidad).\nCompleta la postulación final en el portal de ChileCompra con tu Clave Única.");
+}
+function mpTLabel(t){ return t==='licitacion'?'Licitación':(t==='convenio_marco'?'Convenio Marco':'Compra Ágil'); }
+function mpCerrada(o){ const f=(o.cierre||"").slice(0,10); return f && f < new Date().toISOString().slice(0,10); }
+async function renderMP(){
+  const term=($("mp-q")?$("mp-q").value:"").toLowerCase(); const est=$("mp-estado")?$("mp-estado").value:""; const tipo=$("mp-tipo")?$("mp-tipo").value:"";
+  const tlabel=mpTLabel;
+  try{ MP_LIST=await tSel("oportunidades","select=*&order=ts.desc"); }catch(e){ $("mp-body").innerHTML=`<tr><td colspan="7" class="muted">Error: ${esc(e.message)}</td></tr>`; return; }
+  const d1=$("mp-desde")?$("mp-desde").value:"", d2=$("mp-hasta")?$("mp-hasta").value:"", orden=$("mp-orden")?$("mp-orden").value:"cierre_asc";
+  const verCerradas=$("mp-cerradas")&&$("mp-cerradas").checked;
+  let list=MP_LIST.filter(o=>{ const f=(o.cierre||"").slice(0,10);
+    return (!est||o.estado_int===est) && (!tipo||(o.tipo||'compra_agil')===tipo)
+      && (verCerradas || !mpCerrada(o))
+      && (!d1||f>=d1) && (!d2||f<=d2)
+      && (!term || (o.codigo||"").toLowerCase().includes(term) || (o.nombre||"").toLowerCase().includes(term)); });
+  list.sort((a,b)=>{ const A=(a.cierre||""), B=(b.cierre||""); return orden==='cierre_desc' ? B.localeCompare(A) : A.localeCompare(B); });
+  $("mp-body").innerHTML=list.map(o=>`<tr>
+     <td style="white-space:nowrap"><b>${esc(o.codigo||"")}</b></td>
+     <td style="white-space:nowrap"><span class="mini">${tlabel(o.tipo||'compra_agil')}</span></td>
+     <td>${esc((o.nombre||"").slice(0,100))}</td>
+     <td style="white-space:nowrap">${esc(o.cierre||"")}</td>
+     <td>${esc(o.estado||"")}</td>
+     <td><select onchange="mpEstado('${o.id}',this.value)" style="font-size:11px">${MP_ESTADOS.map(s=>`<option value="${s}"${o.estado_int===s?" selected":""}>${s}</option>`).join("")}</select></td>
+     <td style="white-space:nowrap">
+        <button class="btn-sec" onclick="mpBuscar('${esc((o.codigo||'').replace(/'/g,''))}')">Ficha</button>
+        <button class="btn-sec" onclick="mpCrearCotiz('${o.id}')">Cotizar</button>
+        <button class="btn-red" onclick="mpQuitar('${o.id}')">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">Sin oportunidades. Usa «Buscar / Sincronizar» para traerlas desde ChileCompra.</td></tr>`;
+  if($("mp-count")) $("mp-count").textContent=list.length+" oportunidades";
+}
+async function mpEstado(id,v){ try{ await tUpdate("oportunidades", id, {estado_int:v}); const o=MP_LIST.find(x=>x.id===id); if(o) o.estado_int=v; }catch(e){ alert(e.message); } }
+async function mpQuitar(id){ if(!confirm("¿Quitar esta oportunidad?")) return; try{ await tDelete("oportunidades", id); renderMP(); }catch(e){ alert(e.message); } }
+function mpUrl(cod){ if(!cod) return "https://www.mercadopublico.cl/"; return /-COT\d*/i.test(cod) ? ("https://compra-agil.mercadopublico.cl/resumen-cotizacion/"+encodeURIComponent(cod)) : ("https://www.mercadopublico.cl/Home/Busqueda?text="+encodeURIComponent(cod)); }
+function mpBuscar(codigo){ window.open(mpUrl(codigo), "_blank"); }
+async function mpCrearCotiz(id){
+  let o=MP_LIST.find(x=>x.id===id);
+  if(!o){ try{ const r=await tSel("oportunidades","id=eq."+id+"&select=*"); o=r&&r[0]; }catch(_){} }
+  if(!o){ alert("No se encontró la oportunidad."); return; }
+  go("cotizaciones"); nuevaCotiz();
+  const cfg=MT.config||{}, d=o.data||{};
+  const obs = cfg.obs_default || ("Plazo de entrega: según bases · Envío gratis"+(cfg.telefono?(" · Tel: "+cfg.telefono):"")+(cfg.emails?(" · Correo: "+cfg.emails):""));
+  // N° = código de la oportunidad
+  if($("b-num")) $("b-num").value = o.codigo||"";
+  // Cliente / institución + RUT + dirección de despacho (traídos de la oportunidad)
+  const dirDespacho = d.direccion_despacho || d.direccion_entrega || d.direccion || o.region || "";
+  if($("b-cli-nombre")) $("b-cli-nombre").value = o.organismo || "";
+  if($("b-cli-rut"))    $("b-cli-rut").value    = o.rut_organismo || "";
+  if($("b-cli-dir"))    $("b-cli-dir").value    = dirDespacho;
+  const c=$("b-cli-coment"); if(c) c.value = obs;
+  if($("cli-flag")) $("cli-flag").textContent = o.organismo ? ("Institución (Mercado Público): "+o.organismo) : "";
+  // Productos: desde data.items/productos; si no hay, usa el nombre de la oportunidad como línea editable
+  const src = Array.isArray(d.items)?d.items:(Array.isArray(d.productos)?d.productos:[]);
+  let items=[];
+  if(src.length){
+    items = src.map(it=>({ productoId:null, nombre:(it.nombre||it.descripcion||it.producto||"").toString(),
+      sku:(it.sku||it.codigo||"").toString(), proveedor:"", costo:Number(it.costo||0)||0,
+      precioFijo:Number(it.precio_unit||it.precio||0)||0, cantidad:Math.max(1,parseInt(it.cantidad||it.cant||1)||1),
+      detalle:(it.detalle||it.descripcion||"").toString(), imagen:it.imagen||"" }));
+  } else if(o.nombre){
+    items = [{ productoId:null, nombre:o.nombre, sku:"", proveedor:"", costo:0, precioFijo:0, cantidad:1, detalle:"", imagen:"" }];
+  }
+  if(CURR){ CURR.numero=o.codigo||""; CURR.obs=obs; CURR.oportunidad=o.codigo||""; CURR.clienteId=null; CURR.items=items; }
+  renderItems();
+  try{ await tUpdate("oportunidades", id, {estado_int:"cotizada"}); o.estado_int="cotizada"; }catch(_){}
+  respaldoInterno("cotiza_compra_agil", {codigo:o.codigo||"", nombre:o.nombre||"", organismo:o.organismo||""});
+  alert("Cotización "+(o.codigo||"")+" cargada desde Mercado Público con institución, RUT, dirección de despacho y producto(s).\nPuedes editar, agregar o eliminar líneas y ajustar costos; luego Guardar.");
+}
+async function mpSync(){
+  // La captura desde ChileCompra corre en el backend (Apps Script) por seguridad y por CORS:
+  // el Apps Script escribe las oportunidades en la base cada hora (trigger) o al ejecutar
+  // sincronizarAhora. Aquí sólo refrescamos desde la base — sin llamadas cross-origin.
+  const url=(MT.config&&MT.config.apps_script_url)||"";
+  if($("mp-count")) $("mp-count").textContent="Actualizando…";
+  // Nudge best-effort: pide al backend una captura fresca (no podemos leer la respuesta por CORS, no importa)
+  if(url){ try{ fetch(url+(url.includes("?")?"&":"?")+"action=oportunidades&t="+Date.now(), {method:"GET", mode:"no-cors", cache:"no-store"}); }catch(_){}
+    try{ fetch(url+(url.includes("?")?"&":"?")+"action=sync&t="+Date.now(), {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:"{}"}); }catch(_){} }
+  try{
+    await renderMP();
+    const n=(MP_LIST||[]).length;
+    alert("Actualizado desde la base: "+n+" oportunidades.\nLa captura desde ChileCompra corre automáticamente cada hora en el backend (o ejecuta «sincronizarAhora» en Apps Script para traerlas al instante).");
+  }catch(e){ if($("mp-count"))$("mp-count").textContent=""; alert("No se pudo actualizar: "+((e&&e.message)||e)); }
+}
+async function mpLimpiarCerradas(){
+  const cerradas=(MP_LIST||[]).filter(mpCerrada);
+  if(!cerradas.length){ alert("No hay oportunidades cerradas para limpiar."); return; }
+  if(!confirm("Se eliminarán "+cerradas.length+" oportunidades ya cerradas para aligerar el sistema. ¿Continuar?")) return;
+  let n=0; for(const o of cerradas){ try{ await tDelete("oportunidades", o.id); n++; }catch(_){} }
+  await renderMP(); alert("Limpieza lista. Eliminadas: "+n+".");
+}
+</script>
+</body>
+</html>
