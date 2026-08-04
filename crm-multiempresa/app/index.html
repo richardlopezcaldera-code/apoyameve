@@ -274,7 +274,11 @@ td{padding:9px 10px;}
               <input type="number" id="b-fc-cant" value="1" min="1" style="max-width:70px">
             </div>
             <div class="row" style="margin-top:6px">
+              <input id="b-fc-link" placeholder="Link web (de dónde cotizaste) — solo interno, el cliente NO lo ve" style="flex:2">
               <input id="b-fc-prov" placeholder="Proveedor (opcional)">
+            </div>
+            <div class="row" style="margin-top:6px">
+              <input id="b-fc-img" placeholder="URL de imagen (opcional) — sale en el PDF" style="flex:2">
               <button class="btn" style="flex:0;white-space:nowrap" onclick="addFueraItem()">+ Agregar</button>
             </div>
           </div>
@@ -1044,8 +1048,10 @@ function addFueraItem(){
   const nombre=$("b-fc-nombre").value.trim(); if(!nombre){ alert("Nombre del producto"); return; }
   const costo=parseNum($("b-fc-costo").value), cant=Math.max(1, parseInt($("b-fc-cant").value)||1);
   CURR.items.push({ productoId:null, nombre, sku:"", proveedor:$("b-fc-prov").value.trim(),
-                    costo, precioFijo:0, cantidad:cant, detalle:"" });
+                    costo, precioFijo:0, cantidad:cant, detalle:"",
+                    link:($("b-fc-link")?$("b-fc-link").value.trim():""), imagen:($("b-fc-img")?$("b-fc-img").value.trim():"") });
   $("b-fc-nombre").value=$("b-fc-costo").value=$("b-fc-prov").value=""; $("b-fc-cant").value=1;
+  if($("b-fc-link")) $("b-fc-link").value=""; if($("b-fc-img")) $("b-fc-img").value="";
   renderItems();
 }
 
@@ -1054,8 +1060,23 @@ function renderItems(){
   if(!CURR) return;
   CURR.pct = Number($("b-pct").value)||0; CURR.despacho = parseNum($("b-despacho").value); CURR.despMode = $("b-despmodo").value;
   if(!CURR.items.length){ $("b-items").innerHTML = `<div class="muted">Agrega productos del catálogo o "fuera de catálogo".</div>`; recalc(); return; }
-  const rows = CURR.items.map((it,i)=>{ const pu=qUnit(CURR,it); return `<tr>
-      <td>${esc(it.nombre)}<br><input placeholder="Detalle (opcional)" value="${esc(it.detalle||"")}" oninput="setItemDetalle(${i},this.value)" style="margin-top:3px;font-size:11px"></td>
+  const rows = CURR.items.map((it,i)=>{ const pu=qUnit(CURR,it); const img=itemImg(it); return `<tr>
+      <td>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:0 0 46px">
+            ${img?`<img src="${esc(img)}" onerror="this.style.display='none'" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--linea)">`:`<div style="width:46px;height:46px;border-radius:6px;border:1px dashed var(--linea);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9ca3af">🪑</div>`}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${esc(it.nombre)}</div>
+            <input placeholder="Detalle (opcional) — se muestra en el PDF" value="${esc(it.detalle||"")}" oninput="setItemDetalle(${i},this.value)" style="width:100%;margin-top:3px;font-size:11px">
+            <div style="display:flex;gap:4px;margin-top:3px">
+              <input placeholder="Link del producto (interno — el cliente NO lo ve)" value="${esc(it.link||"")}" oninput="setItemLink(${i},this.value)" style="flex:1;font-size:11px">
+              <button class="btn-sec" style="padding:2px 8px" onclick="buscarProdWeb(${i})" title="Buscar el producto en la web (imagen/link)">🔎 Buscar</button>
+            </div>
+            <input placeholder="URL de imagen (pega o usa Buscar) — sale en el PDF" value="${esc(it.imagen||"")}" oninput="setItemImagen(${i},this.value)" style="width:100%;font-size:11px;margin-top:3px">
+          </div>
+        </div>
+      </td>
       <td style="width:64px"><input type="number" min="1" value="${it.cantidad}" onchange="setItemCant(${i},this.value)"></td>
       <td style="width:110px"><input type="text" inputmode="decimal" value="${pu}" onchange="setItemPrecio(${i},this.value)" title="Precio neto unitario"></td>
       <td class="right" style="width:90px">${money(pu*it.cantidad)}</td>
@@ -1066,6 +1087,16 @@ function renderItems(){
 function setItemCant(i,v){ if(CURR.items[i]){ CURR.items[i].cantidad=Math.max(1,parseInt(v)||1); renderItems(); } }
 function setItemPrecio(i,v){ if(CURR.items[i]){ const n=parseNum(v); CURR.items[i].precioFijo=(n>0)?n:0; renderItems(); } }
 function setItemDetalle(i,v){ if(CURR.items[i]) CURR.items[i].detalle=(v||"").slice(0,200); }
+function setItemLink(i,v){ if(CURR.items[i]) CURR.items[i].link=(v||"").trim(); }
+function setItemImagen(i,v){ if(CURR.items[i]){ CURR.items[i].imagen=(v||"").trim(); renderItems(); } }
+// Búsqueda del producto en la web (imagen/link). Abre búsqueda de compras + imágenes.
+function buscarProdWeb(i){
+  const it=CURR.items[i]; if(!it) return;
+  const q=encodeURIComponent(((it.nombre||"")+" "+(it.detalle||"")).trim());
+  if(!q){ alert("La línea no tiene nombre para buscar."); return; }
+  window.open("https://www.google.com/search?tbm=shop&q="+q, "_blank");   // compras (precio/link)
+  window.open("https://www.google.com/search?tbm=isch&q="+q, "_blank");   // imágenes (copia la URL a «URL de imagen»)
+}
 function delItem(i){ CURR.items.splice(i,1); renderItems(); }
 function recalc(){
   if(!CURR) return;
