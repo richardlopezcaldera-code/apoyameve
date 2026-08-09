@@ -1,0 +1,9 @@
+{
+  "name": "crm-empresa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sitio estatico del CRM Multiempresa (sin dependencias).",
+  "scripts": {
+    "build": "echo \"Sitio estatico: nada que compilar\""
+  }
+}
