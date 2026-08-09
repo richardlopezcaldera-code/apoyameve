@@ -60,6 +60,12 @@ usa las APIs directas de Meta/TikTok. Ver `docs/SETUP-METRICOOL.md`,
 
 Rutas útiles: `/queue` (historial) y `/run-now?token=<RUN_TOKEN>` (prueba manual).
 
+## Herramientas de desarrollo
+
+- **OmniRoute** — gateway de IA local (endpoint compatible con OpenAI en
+  `http://localhost:20128/v1`). Es opcional y no se despliega con el Worker:
+  ver [`docs/SETUP-OMNIROUTE.md`](./docs/SETUP-OMNIROUTE.md).
+
 ## Hosting
 
 La app corre en **Cloudflare Workers**. Vercel está desactivado para este repo
