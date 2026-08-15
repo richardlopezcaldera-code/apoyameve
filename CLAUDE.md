@@ -90,3 +90,38 @@ setup) installed at `~/.claude/skills/gstack`. Invoke any tool below with `/<nam
 > Reaching public websites is still limited by the environment's outbound network
 > policy (the egress gateway returns 403 for non-allowlisted hosts), which affects
 > `/browse`, `/qa`, `/scrape`, and `/design-review` against arbitrary sites.
+
+## UI/UX Pro Max skills
+
+[UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) v2.13.0 is
+installed in-repo at `.claude/skills/`. These are model-invoked skills — they activate
+on design intent rather than a slash command.
+
+- `ui-ux-pro-max` — Orchestrator. Searchable catalogs of styles, palettes, font
+  pairings, UX guidelines, icons, chart types, and 22 stack-specific guides.
+- `design` — Brand identity, logos, corporate identity, banners, icons, social images.
+- `design-system` — Three-layer design tokens (primitive → semantic → component).
+- `brand` — Brand voice, messaging frameworks, style guides.
+- `ui-styling` — shadcn/ui, Tailwind, responsive layout, dark mode, accessibility.
+- `banner-design` — Banners for social, ads, web heroes, and print.
+- `slides` — HTML presentations with Chart.js.
+
+The catalogs are queried through a local Python script (no network, no API key):
+
+```bash
+# Full design-system recommendation for a project
+python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<product> <industry>" --design-system -p "Name"
+
+# Targeted lookup in one domain
+python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain style
+python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack react
+```
+
+Two gaps to know about, both inherited from the upstream npm package:
+
+- `banner-design`'s AI image-generation steps call the author's separate `ai-artist`,
+  `ai-multimodal`, and `chrome-devtools` skills, which are not part of this package.
+  Every other skill works standalone.
+- `ui-styling/references/canvas-design-system.md` points at a `./canvas-fonts`
+  directory that upstream excludes from the published package (5.8 MB of font
+  binaries). Only the canvas/poster workflow touches it.
