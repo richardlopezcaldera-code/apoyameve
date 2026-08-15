@@ -1,0 +1,34 @@
+name = "apoyameve-worker"
+main = "src/index.ts"
+compatibility_date = "2026-08-15"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Variables públicas ──
+# Se commitean. Para valores sensibles usar secrets (abajo).
+[vars]
+APP_NAME = "apoyameve-worker"
+ENVIRONMENT = "production"
+
+# ── Secrets (NO se commitean) ──
+# Se cargan una vez por entorno con:
+#   npx wrangler secret put API_TOKEN
+# En local se leen de .dev.vars (ver .dev.vars.example).
+
+# ── Entorno de staging ──
+# Deploy con:  npx wrangler deploy --env staging
+[env.staging]
+name = "apoyameve-worker-staging"
+
+[env.staging.vars]
+APP_NAME = "apoyameve-worker"
+ENVIRONMENT = "staging"
+
+# ── Extras que se activan cuando hagan falta ──
+# KV:      npx wrangler kv namespace create CACHE
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "<pegar-id>"
+#
+# Cron:
+# [triggers]
+# crons = ["0 12 * * *"]
