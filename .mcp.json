@@ -49,6 +49,13 @@
     "time": {
       "command": "uvx",
       "args": ["mcp-server-time"]
+    },
+    "nanobanana": {
+      "command": "npx",
+      "args": ["-y", "@dondonudonjp/nanobanana-mcp-server"],
+      "env": {
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
+      }
     }
   }
 }
