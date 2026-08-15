@@ -5,3 +5,7 @@ dist/
 .mcp.env
 *.log
 .DS_Store
+
+# Intermedio del build de CSS. El resultado que sí se versiona es
+# lib/ui/styles.generated.ts, que es lo que importa el Worker.
+lib/ui/styles.generated.css

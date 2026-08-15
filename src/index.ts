@@ -15,6 +15,7 @@ import { squarePostHTML, storyHTML, catalogHTML, type Format } from "../lib/temp
 import { BRAND } from "../lib/brand";
 import { formatCLP } from "../lib/format";
 import { homeHTML } from "./home";
+import { landingHTML } from "./landing";
 import { reelHTML } from "./reel";
 import { pickForIndex } from "../lib/schedule";
 import { caption } from "../lib/caption";
@@ -318,6 +319,10 @@ app.get("/estado", async (c) => {
 
 // Home pública (estilo aprobado)
 app.get("/", (c) => c.html(homeHTML()));
+
+// Landing armada con el sistema de plantillas de lib/ui/. Convive con la home
+// actual: sirve para revisar los bloques antes de migrar `/` a este sistema.
+app.get("/landing", (c) => c.html(landingHTML()));
 
 // Generador de avisos (herramienta interna)
 app.get("/generador", async (c) => {

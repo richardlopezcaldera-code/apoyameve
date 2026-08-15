@@ -1,0 +1,172 @@
+/* ── Entrada de Tailwind ───────────────────────────────────────────────────
+ *
+ * Compilar con `npm run build:css`. El orden importa: primero Tailwind, luego
+ * el `@theme` generado desde `tokens.ts`, y al final las utilidades propias.
+ *
+ * No edites `theme.generated.css` a mano: se reescribe en cada build.
+ */
+
+@import "tailwindcss";
+@import "./theme.generated.css";
+
+/* Dónde buscar clases. El markup vive en plantillas TS que devuelven HTML,
+ * así que hay que apuntar a los `.ts` — Tailwind no los escanea por defecto. */
+@source "../../lib/**/*.ts";
+@source "../../src/**/*.ts";
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-cream);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  /* `text-wrap: balance` evita títulos con una palabra huérfana en la última
+   * línea. Es progresivo: el navegador que no lo soporta simplemente lo ignora. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  /* Los párrafos usan `pretty`, no `balance`: en texto largo `balance` es caro
+   * y el navegador lo desactiva igual pasadas unas líneas. */
+  p {
+    text-wrap: pretty;
+  }
+
+  img {
+    max-width: 100%;
+    display: block;
+  }
+
+  /* Un solo anillo de foco para todo el sitio. Nunca se quita: se rediseña. */
+  :focus-visible {
+    outline: 3px solid var(--color-rust);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Respeta la preferencia del sistema. Todo lo decorativo se apaga; lo que
+   * comunica estado se acorta pero no desaparece. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ── Utilidades propias ──────────────────────────────────────────────────── */
+
+/* Contenedor centrado con gutter fluido. Reemplaza al clásico
+ * `mx-auto max-w-7xl px-4 sm:px-6 lg:px-8` repetido en cada sección. */
+@utility wrap {
+  max-width: var(--wrap);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Ritmo vertical de sección. Un solo token para todo el sitio. */
+@utility section-y {
+  padding-block: var(--section-y);
+}
+
+/* Elevación al hover para cards y categorías. Anima sólo `transform` y
+ * `box-shadow`, nunca `width`/`height`/`top`, que fuerzan reflow. */
+@utility lift {
+  transition:
+    transform var(--dur-base) var(--ease-out-soft),
+    box-shadow var(--dur-base) var(--ease-out-soft);
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 34px -20px color-mix(in srgb, var(--color-ink) 45%, transparent);
+  }
+}
+
+/* Feedback de presión. Escala sutil (0.97) según la guía de motion: sirve
+ * para botones y cards tappables sin desplazar el layout de alrededor. */
+@utility press {
+  transition: transform var(--dur-fast) var(--ease-out-soft);
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+/* ── Reveal al hacer scroll ──────────────────────────────────────────────── */
+
+/* El estado inicial se aplica sólo si hay JS y el usuario no pidió menos
+ * movimiento. Sin JS el contenido se ve igual: nunca queda invisible. */
+@layer components {
+  .reveal {
+    opacity: 1;
+  }
+
+  html.js .reveal {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+    transition:
+      opacity var(--dur-enter) var(--ease-out-soft),
+      transform var(--dur-enter) var(--ease-back);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  html.js .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html.js .reveal {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* ── Puntos flotantes del hero ───────────────────────────────────────────── */
+
+@layer components {
+  .dot {
+    position: absolute;
+    border-radius: var(--radius-pill);
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dot {
+      animation: float 7s ease-in-out infinite;
+    }
+    .dot:nth-child(even) {
+      animation-duration: 9s;
+    }
+    .dot:nth-child(3n) {
+      animation-delay: -2s;
+    }
+  }
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+}

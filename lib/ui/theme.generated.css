@@ -1,0 +1,55 @@
+/* Generado por scripts/build-css.mjs desde lib/ui/tokens.ts. No editar. */
+
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --white: #ffffff;
+  --black: #000000;
+
+  /* Colores */
+  --color-cream: #f3ece1;
+  --color-cream2: #efe5d6;
+  --color-card: #fbf7f0;
+  --color-beige: #d9c5aa;
+  --color-ink: #1c1815;
+  --color-ink-soft: #4a4038;
+  --color-muted: #8a7c6a;
+  --color-line: #e2d6c3;
+  --color-rust: #b24a2c;
+  --color-rust-ink: #8f3a20;
+  --color-mustard: #e4be5c;
+  --color-blue: #7fa9ce;
+  --color-green: #5e8c4e;
+  --color-on-ink: #f4ece0;
+  --color-on-rust: #fdf1e7;
+
+  /* Tipografía */
+  --font-sans: "Poppins", "Quicksand", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Caveat", "Segoe Script", "Bradley Hand", cursive;
+
+  /* Radios */
+  --radius-sm: 6px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* Movimiento */
+  --ease-out-soft: cubic-bezier(.22,.61,.36,1);
+  --ease-back: cubic-bezier(.34,1.36,.64,1);
+
+  /* Breakpoints */
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1440px;
+}
+
+:root {
+  --section-y: clamp(44px, 6vw, 80px);
+  --gutter: clamp(16px, 4vw, 40px);
+  --wrap: 1240px;
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-enter: 400ms;
+  --dur-exit: 260ms;
+}
