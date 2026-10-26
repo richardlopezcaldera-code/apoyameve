@@ -693,7 +693,19 @@ async function rest(path, opts){ const r = await fetch(SUPA_URL+"/rest/v1/"+path
    filtramos por empresa_id además por eficiencia. Los INSERT/UPDATE inyectan
    empresa_id de la empresa activa. */
 function empId(){ if(!MT.empresa) throw new Error("No hay empresa activa"); return MT.empresa.id; }
-function tSel(table, extra){ return rest(table+"?empresa_id=eq."+empId()+(extra?("&"+extra):"&select=*")); }
+async function tSel(table, extra){
+  const base = table+"?empresa_id=eq."+empId()+(extra?("&"+extra):"&select=*");
+  if(/[?&](limit|offset)=/.test(base)) return rest(base);            /* ya paginado por quien llama */
+  let out=[], off=0;
+  for(;;){
+    const pg = await rest(base+"&limit=1000&offset="+off);
+    if(!Array.isArray(pg)) return pg;                                 /* respuesta no-lista: devolver tal cual */
+    out = out.concat(pg);
+    if(pg.length < 1000) break;                                       /* última página */
+    off += 1000;
+  }
+  return out;
+}
 function tInsert(table, row){ return rest(table, {method:"POST",
   headers:{...H(), Prefer:"return=representation"}, body:JSON.stringify({...row, empresa_id:empId()})}); }
 function tUpdate(table, id, patch){ return rest(table+"?id=eq."+id+"&empresa_id=eq."+empId(), {method:"PATCH",
