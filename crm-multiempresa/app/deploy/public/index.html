@@ -2120,3 +2120,8 @@ async function mpLimpiarCerradas(){
 </script>
 </body>
 </html>
+
+<script>
+/* Auto-formato RUT chileno: puntos de mil + guion verificador */
+(function(){function dot(v){v=String(v||'').replace(/[^0-9kK]/g,'').toUpperCase();if(v.length<2)return v;var c=v.slice(0,-1),d=v.slice(-1);c=c.replace(/\B(?=(\d{3})+(?!\d))/g,'.');return c+'-'+d;}document.addEventListener('input',function(e){var el=e.target;if(!el||el.tagName!=='INPUT')return;var id=(el.id||'');if(!/rut/i.test(id))return;if(/search|cliq|-q$|cl-q|busq/i.test(id))return;setTimeout(function(){var raw=(el.value||'').replace(/[^0-9kK]/gi,'');if(raw.length<2||raw.length>9)return;var f=dot(el.value);if(el.value!==f){el.value=f;try{el.setSelectionRange(f.length,f.length);}catch(_){}}},0);},true);})();
+</script>
