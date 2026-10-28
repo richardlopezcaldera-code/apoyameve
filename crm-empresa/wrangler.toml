@@ -1,0 +1,8 @@
+# Sitio estático del CRM Multiempresa.
+# Cloudflare (worker crm-multiempresa) usa Root directory = /crm-empresa
+name = "crm-multiempresa"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"
