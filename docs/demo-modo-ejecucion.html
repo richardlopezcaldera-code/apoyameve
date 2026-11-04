@@ -1,0 +1,410 @@
+<title>Modo ejecución</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: barra de reloj simulado arriba; cuerpo en dos columnas (tarea actual | cola) y abajo supervisor + playbook + historial. */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --line:#d9e0dd; --fg:#16211d; --muted:#5d6b66;
+  --accent:#0f6b4f; --accent-fg:#ffffff; --accent-soft:#e1f0ea;
+  --warn:#a35a00; --warn-soft:#fbeedb; --bad:#b3261e; --bad-soft:#fbe4e2; --ok:#1e7a3c; --ok-soft:#e0f2e6;
+  --wa:#1f8a4c; --mail:#2c5aa0; --call:#7a4bb0; --task:#5d6b66;
+  --f-body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101614; --surface:#18201d; --line:#2b3632; --fg:#e4ebe8; --muted:#94a39d;
+  --accent:#4cc79a; --accent-fg:#06231a; --accent-soft:#163128;
+  --warn:#f0a94a; --warn-soft:#3a2a12; --bad:#f2817a; --bad-soft:#3d1c1a; --ok:#6fd38f; --ok-soft:#163020;
+  --wa:#5fd08f; --mail:#8fb3ec; --call:#c4a1ee; --task:#94a39d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#18201d; --line:#2b3632; --fg:#e4ebe8; --muted:#94a39d;
+  --accent:#4cc79a; --accent-fg:#06231a; --accent-soft:#163128;
+  --warn:#f0a94a; --warn-soft:#3a2a12; --bad:#f2817a; --bad-soft:#3d1c1a; --ok:#6fd38f; --ok-soft:#163020;
+  --wa:#5fd08f; --mail:#8fb3ec; --call:#c4a1ee; --task:#94a39d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:20px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-weight:500}
+button:hover{border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+input,select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;width:100%}
+label{display:grid;gap:4px;font-size:.82rem;color:var(--muted)}
+
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:end;justify-content:space-between}
+.top p{margin:4px 0 0;max-width:62ch}
+.clock{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.clock .now{font-size:.95rem;padding:0 6px}
+.tag{display:inline-block;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--warn-soft);color:var(--warn)}
+
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tabs .count{font-family:var(--f-mono);font-size:.8rem;opacity:.75;margin-left:4px}
+
+.main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;gap:14px;min-width:0}
+
+.task-head{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between}
+.who{font-size:1.3rem;font-weight:700}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.88rem;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid currentColor}
+.ch-whatsapp{color:var(--wa)} .ch-correo{color:var(--mail)} .ch-llamada{color:var(--call)} .ch-tarea{color:var(--task)}
+.late{color:var(--bad);font-weight:600}
+.steps{display:flex;gap:4px}
+.steps span{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.steps span.done{background:var(--accent)} .steps span.cur{background:var(--warn)}
+.msg{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;white-space:pre-wrap;font-size:.97rem}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.results{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:480px){.results{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.results button{text-align:left;display:grid;gap:2px}
+.results small{color:var(--muted);font-weight:400;font-size:.76rem}
+.results .r-compro{border-color:var(--ok);background:var(--ok-soft)}
+.results .r-perdido{border-color:var(--bad);background:var(--bad-soft)}
+.pospo{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:8px;align-items:end}
+@media (max-width:480px){.pospo{grid-template-columns:minmax(0,1fr)}}
+.empty{text-align:center;padding:28px 10px;color:var(--muted)}
+.empty strong{display:block;color:var(--fg);font-size:1.05rem;margin-bottom:4px}
+.toast{font-size:.88rem;padding:8px 12px;border-radius:8px;background:var(--accent-soft);color:var(--fg)}
+.toast.err{background:var(--bad-soft)}
+
+.queue{display:grid;gap:6px;max-height:480px;overflow:auto}
+.qi{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface)}
+.qi.is-next{border-color:var(--accent);background:var(--accent-soft)}
+.qi .n{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qi .s{font-size:.8rem;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.dot.late{background:var(--bad)} .dot.due{background:var(--warn)} .dot.later{background:var(--line)}
+.qi .when{font-size:.78rem;text-align:right}
+
+.lower{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.lower{grid-template-columns:minmax(0,1fr)}}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td.alert{color:var(--bad);font-weight:600}
+.pb{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.pb li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start}
+.pb .o{font-family:var(--f-mono);font-weight:600;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--bg);border:1px solid var(--line);font-size:.85rem}
+.pb .t{font-weight:600}
+.pb .d{font-size:.82rem;color:var(--muted)}
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.form .full{grid-column:1/-1}
+@media (max-width:480px){.form{grid-template-columns:minmax(0,1fr)}}
+.log{display:grid;gap:4px;font-size:.84rem;max-height:240px;overflow:auto;margin:0;padding:0;list-style:none}
+.log li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px}
+.log .mono{color:var(--muted);font-size:.78rem}
+@media (prefers-reduced-motion:no-preference){.panel,.qi{transition:border-color .15s,background .15s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Modo ejecución <span class="tag">Demo · datos de ejemplo</span></h1>
+      <p class="muted">Simula el playbook <b>Cotización web enviada</b> de la migración <code>ejec_*</code>. El vendedor ve una sola tarea a la vez, registra qué pasó y el sistema agenda el paso siguiente.</p>
+    </div>
+    <div class="clock" aria-label="Reloj simulado">
+      <span class="muted" style="font-size:.8rem">Hora simulada</span>
+      <span class="now mono" id="now"></span>
+      <button id="t2h">+2 horas</button>
+      <button id="t1d">+1 día</button>
+      <button id="reset">Reiniciar</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="Vendedor"></nav>
+
+  <section class="main">
+    <div class="panel" id="current" aria-live="polite"></div>
+    <div class="panel">
+      <div class="task-head"><h2>Cola del vendedor</h2><span class="muted" style="font-size:.8rem" id="qcount"></span></div>
+      <div class="queue" id="queue"></div>
+    </div>
+  </section>
+
+  <section class="lower">
+    <div class="panel">
+      <h2>Supervisor</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Vendedor</th><th>Vencidas</th><th>Para hoy</th><th>Hechas hoy</th><th>Contactos 30d</th><th>Ventas 30d</th><th>Perdidos 30d</th><th>Posposiciones</th></tr></thead>
+        <tbody id="sup"></tbody>
+      </table></div>
+      <h2>Conversión por paso</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Paso</th><th>Hechas</th><th>Contestaron</th><th>Compraron</th><th>% contacto</th></tr></thead>
+        <tbody id="conv"></tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h2>Nueva cotización enviada</h2>
+      <form class="form" id="newf">
+        <label class="full">Cliente<input id="f-nombre" required value="Paula Soto"></label>
+        <label>Teléfono<input id="f-tel" value="+56 9 8765 4321"></label>
+        <label>Monto<input id="f-monto" value="$1.280.000"></label>
+        <label>N° cotización<input id="f-cot" value="COT-0142"></label>
+        <label>Vendedor<select id="f-vend"></select></label>
+        <div class="full row"><button class="primary" type="submit">Iniciar playbook</button><span id="newmsg" class="muted" style="font-size:.85rem;align-self:center"></span></div>
+      </form>
+      <h2>Pasos del playbook</h2>
+      <ol class="pb" id="pb"></ol>
+      <h2>Historial</h2>
+      <ul class="log" id="log"></ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // ---------- Motor (mismo comportamiento que las funciones SQL ejec_*) ----------
+  const PASOS = [
+    {orden:1,nombre:'Confirmar recepción',canal:'whatsapp',espera:120,
+     plantilla:'Hola {nombre}, te escribo de {empresa}. Te enviamos la cotización por {monto}. ¿La recibiste bien? Cualquier duda me dices.'},
+    {orden:2,nombre:'Llamada de seguimiento',canal:'llamada',espera:1440,
+     plantilla:'Preguntar: ¿revisaron la cotización? ¿Hay algo que ajustar (cantidad, modelo, plazo)?'},
+    {orden:3,nombre:'Correo con alternativa',canal:'correo',espera:4320,
+     plantilla:'Hola {nombre}, te dejo una alternativa a la cotización anterior por si se ajusta mejor: {link}. Quedo atento.'},
+    {orden:4,nombre:'Última oferta',canal:'whatsapp',espera:10080,
+     plantilla:'Hola {nombre}, cierro el seguimiento de la cotización {monto}. Si la retomas, te mantengo el precio hasta fin de mes. ¡Gracias!'}
+  ];
+  const VENDEDORES = [{id:'v1',nombre:'Camila Rojas'},{id:'v2',nombre:'Diego Muñoz'},{id:'v3',nombre:'Fernanda Lagos'}];
+  const RESULTADOS = [
+    {k:'contesto',l:'Contestó',d:'Sigue al próximo paso'},
+    {k:'no_contesto',l:'No contestó',d:'Sigue al próximo paso'},
+    {k:'pidio_cambio',l:'Pidió cambio',d:'Sigue al próximo paso'},
+    {k:'compro',l:'Compró',d:'Cierra el seguimiento'},
+    {k:'perdido',l:'Perdido',d:'Cierra el seguimiento'},
+    {k:'no_aplica',l:'No aplica',d:'Cierra el seguimiento'}
+  ];
+  const CANAL = {whatsapp:'WhatsApp',correo:'Correo',llamada:'Llamada',tarea:'Tarea'};
+  const MIN = 60000;
+  const BASE = new Date(2026,10,4,9,30); // mié 4 nov 2026, 09:30
+
+  let S; // estado
+  function fresh(){ return {ahora:new Date(BASE.getTime()), tareas:[], log:[], seq:0, vend:'v1'}; }
+
+  const abierta = t => t.estado==='pendiente'||t.estado==='pospuesta';
+  const paso = t => PASOS.find(p=>p.orden===t.orden);
+  function render(pl,t){
+    let out = pl.replaceAll('{nombre}', t.nombre||'');
+    for (const [k,v] of Object.entries(t.datos)) out = out.replaceAll('{'+k+'}', v??'');
+    return out;
+  }
+  function logit(txt){ S.log.unshift({at:new Date(S.ahora), txt}); }
+
+  function iniciar(vend, entidad, nombre, tel, datos){
+    if (S.tareas.some(t=>t.entidad===entidad && abierta(t))) return null; // ya está en curso
+    const p = PASOS[0];
+    const t = {id:++S.seq, vend, entidad, nombre, tel, datos, orden:p.orden, estado:'pendiente', resultado:null,
+               nota:'', posposiciones:0, creado:new Date(S.ahora), vence:new Date(S.ahora.getTime()+p.espera*MIN), cerrado:null};
+    S.tareas.push(t); return t;
+  }
+  function registrar(id, resultado, nota){
+    const t = S.tareas.find(x=>x.id===id);
+    if (!t) throw new Error('La tarea no existe');
+    if (!abierta(t)) throw new Error('La tarea ya está cerrada');
+    t.estado='hecha'; t.resultado=resultado; t.cerrado=new Date(S.ahora);
+    if (nota) t.nota = t.nota ? t.nota+' | '+nota : nota;
+    if (['compro','perdido','no_aplica'].includes(resultado)) return null;
+    const sig = PASOS.find(p=>p.orden>t.orden);
+    if (!sig) return null;
+    const n = {...t, id:++S.seq, orden:sig.orden, estado:'pendiente', resultado:null, nota:'', posposiciones:0,
+               creado:new Date(S.ahora), vence:new Date(S.ahora.getTime()+sig.espera*MIN), cerrado:null};
+    S.tareas.push(n); return n;
+  }
+  function posponer(id, minutos, motivo){
+    if (!motivo || !motivo.trim()) throw new Error('Para posponer, escribe el motivo.');
+    if (!(minutos>0)) throw new Error('Elige cuánto tiempo posponer.');
+    const t = S.tareas.find(x=>x.id===id);
+    if (!t || !abierta(t)) throw new Error('La tarea no existe o ya está cerrada.');
+    t.estado='pospuesta'; t.vence=new Date(S.ahora.getTime()+minutos*MIN);
+    t.nota = (t.nota? t.nota+' | ':'') + 'Pospuesta: '+motivo.trim();
+    t.posposiciones++;
+  }
+  const cola = v => S.tareas.filter(t=>abierta(t) && t.vend===v).sort((a,b)=>a.vence-b.vence);
+  const siguiente = v => cola(v).find(t=>t.vence<=S.ahora) || null;
+  const mismoDia = (a,b) => a && a.toDateString()===b.toDateString();
+
+  // ---------- Datos de ejemplo: se generan corriendo el motor desde hace 5 días ----------
+  function seed(){
+    S = fresh();
+    const real = S.ahora.getTime();
+    const avanza = m => { S.ahora = new Date(S.ahora.getTime()+m*MIN); };
+    S.ahora = new Date(real - 5*1440*MIN);
+    const L = n => 'https://mobiliariotech.cl/cotizacion/'+n;
+    const c = [
+      ['v1','COT-0118','Rodrigo Vera','+56 9 6123 4455','$450.000'],
+      ['v1','COT-0121','Constructora Andes (María Paz)','+56 9 7788 1020','$3.920.000'],
+      ['v2','COT-0122','Colegio San Esteban','+56 9 5544 3322','$2.150.000'],
+      ['v1','COT-0125','Javier Fuentes','+56 9 9012 3344','$289.990'],
+      ['v3','COT-0126','Clínica Los Robles','+56 9 4433 2211','$6.480.000'],
+      ['v2','COT-0127','Andrea Pizarro','+56 9 8899 0011','$612.000'],
+    ];
+    const ids = {};
+    c.forEach(([v,cot,n,tel,m],i)=>{ ids[cot]=iniciar(v,cot,n,tel,{empresa:'MobiliarioTech',monto:m,link:L(cot)}); avanza(90); });
+    avanza(240);
+    const close = (cot,res,nota) => { const t=S.tareas.find(x=>x.entidad===cot&&abierta(x)); if(t) registrar(t.id,res,nota); };
+    close('COT-0118','contesto','La recibió, la revisa con su socio');
+    close('COT-0121','no_contesto'); close('COT-0122','contesto'); close('COT-0125','compro','Pagó por transferencia');
+    close('COT-0126','no_contesto'); close('COT-0127','pidio_cambio','Quiere sillas sin apoyabrazos');
+    avanza(1500);
+    close('COT-0122','compro','OC recibida'); close('COT-0118','no_contesto'); close('COT-0127','contesto');
+    avanza(1500);
+    const t21=S.tareas.find(x=>x.entidad==='COT-0121'&&abierta(x)); if(t21) posponer(t21.id,1200,'Cliente pidió llamar después de su licitación');
+    close('COT-0126','perdido','Compró a otro proveedor');
+    S.ahora = new Date(real - 3*60*MIN);
+    ['COT-0130|Sofía Herrera|+56 9 3322 1100|$740.000|v1','COT-0131|Bodegas Puerto Sur|+56 9 2211 0099|$1.990.000|v2','COT-0132|Tomás Araya|+56 9 1100 9988|$355.000|v3']
+      .forEach(s=>{const [cot,n,tel,m,v]=s.split('|'); iniciar(v,cot,n,tel,{empresa:'MobiliarioTech',monto:m,link:L(cot)}); avanza(20);});
+    S.ahora = new Date(real);
+    S.log = [];
+    logit('Datos de ejemplo cargados: 9 cotizaciones con seguimientos de los últimos 5 días.');
+  }
+
+  // ---------- UI ----------
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmt = d => d.toLocaleString('es-CL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  function rel(d){
+    const m = Math.round((d - S.ahora)/MIN), a=Math.abs(m);
+    const txt = a<60 ? a+' min' : a<1440 ? Math.round(a/60)+' h' : Math.round(a/1440)+' d';
+    return m<0 ? 'atrasada '+txt : m===0 ? 'ahora' : 'en '+txt;
+  }
+  let flash = null;
+
+  function draw(){
+    $('now').textContent = fmt(S.ahora);
+    // pestañas
+    $('tabs').innerHTML = VENDEDORES.map(v=>{
+      const n = cola(v.id).filter(t=>t.vence<=S.ahora).length;
+      return `<button aria-pressed="${v.id===S.vend}" data-v="${v.id}">${esc(v.nombre)}<span class="count">${n} por hacer</span></button>`;
+    }).join('');
+    // tarea actual
+    const t = siguiente(S.vend), p = t && paso(t);
+    const vn = VENDEDORES.find(v=>v.id===S.vend).nombre.split(' ')[0];
+    let h = '';
+    if (flash) h += `<div class="toast ${flash.err?'err':''}">${esc(flash.txt)}</div>`;
+    if (!t){
+      const prox = cola(S.vend)[0];
+      h += `<div class="empty"><strong>${esc(vn)} no tiene tareas pendientes ahora</strong>${prox?`La próxima es <b>${esc(prox.nombre)}</b> · ${esc(paso(prox).nombre)}, ${rel(prox.vence)}. Usa “+2 horas” o “+1 día” para adelantar el reloj.`:'Inicia un playbook con el formulario “Nueva cotización enviada”.'}</div>`;
+    } else {
+      const msg = render(p.plantilla,t);
+      const late = t.vence < S.ahora;
+      const wa = 'https://wa.me/'+t.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msg);
+      h += `
+        <div class="task-head"><h2>Siguiente tarea de ${esc(vn)}</h2><span class="chip ch-${p.canal}">${CANAL[p.canal]}</span></div>
+        <div>
+          <div class="who">${esc(t.nombre)}</div>
+          <div class="meta"><span class="mono">${esc(t.entidad)}</span><span class="mono">${esc(t.datos.monto)}</span><span class="mono">${esc(t.tel)}</span>
+          <span class="${late?'late':''}">Vence ${fmt(t.vence)} · ${rel(t.vence)}</span>${t.posposiciones?`<span class="late">Pospuesta ${t.posposiciones}×</span>`:''}</div>
+        </div>
+        <div><div class="meta" style="margin-bottom:6px"><span>Paso ${p.orden} de ${PASOS.length}: <b style="color:var(--fg)">${esc(p.nombre)}</b></span></div>
+          <div class="steps">${PASOS.map(x=>`<span class="${x.orden<p.orden?'done':x.orden===p.orden?'cur':''}"></span>`).join('')}</div></div>
+        <div class="msg" id="msg">${esc(msg)}</div>
+        <div class="row">
+          <button id="copy">Copiar mensaje</button>
+          ${p.canal==='whatsapp'?`<a href="${esc(wa)}" target="_blank" rel="noopener"><button type="button" tabindex="-1">Abrir en WhatsApp</button></a>`:''}
+        </div>
+        ${t.nota?`<div class="muted" style="font-size:.85rem">Nota: ${esc(t.nota)}</div>`:''}
+        <label>Nota (opcional)<input id="nota" placeholder="Ej: lo revisa con su jefe el viernes"></label>
+        <div><h2 style="margin-bottom:8px">¿Qué pasó?</h2>
+          <div class="results">${RESULTADOS.map(r=>`<button data-r="${r.k}" class="r-${r.k}"><span>${r.l}</span><small>${r.d}</small></button>`).join('')}</div></div>
+        <div><h2 style="margin-bottom:8px">No se puede saltar: solo posponer con motivo</h2>
+          <div class="pospo">
+            <label>Posponer<select id="pmin"><option value="60">1 hora</option><option value="240">4 horas</option><option value="1440" selected>1 día</option><option value="4320">3 días</option></select></label>
+            <label>Motivo<input id="pmot" placeholder="Ej: cliente en reunión hasta la tarde"></label>
+            <button id="pbtn">Posponer</button>
+          </div></div>`;
+    }
+    $('current').innerHTML = h;
+    // cola
+    const q = cola(S.vend);
+    $('qcount').textContent = q.length+' abiertas';
+    $('queue').innerHTML = q.length ? q.map(x=>{
+      const px=paso(x), st = x.vence < S.ahora ? 'late' : (x.vence<=S.ahora?'due':'later');
+      return `<div class="qi ${t&&x.id===t.id?'is-next':''}"><span class="dot ${st}"></span>
+        <div style="min-width:0"><div class="n">${esc(x.nombre)}</div><div class="s"><span class="chip ch-${px.canal}" style="padding:0 6px;font-size:.7rem">${CANAL[px.canal]}</span> ${px.orden}. ${esc(px.nombre)}</div></div>
+        <div class="when mono ${st==='late'?'late':'muted'}">${rel(x.vence)}</div></div>`;
+    }).join('') : '<div class="empty">Sin tareas abiertas.</div>';
+    // supervisor
+    const hace30 = new Date(S.ahora.getTime()-30*1440*MIN);
+    $('sup').innerHTML = VENDEDORES.map(v=>{
+      const T = S.tareas.filter(x=>x.vend===v.id), r30 = k => T.filter(x=>x.resultado===k && x.cerrado>hace30).length;
+      const venc = T.filter(x=>abierta(x)&&x.vence<S.ahora).length;
+      return `<tr><td>${esc(v.nombre)}</td><td class="num ${venc?'alert':''}">${venc}</td>
+        <td class="num">${T.filter(x=>abierta(x)&&mismoDia(x.vence,S.ahora)).length}</td>
+        <td class="num">${T.filter(x=>x.estado==='hecha'&&mismoDia(x.cerrado,S.ahora)).length}</td>
+        <td class="num">${r30('contesto')}</td><td class="num">${r30('compro')}</td><td class="num">${r30('perdido')}</td>
+        <td class="num">${T.filter(x=>x.cerrado>hace30).reduce((a,x)=>a+x.posposiciones,0)}</td></tr>`;
+    }).join('');
+    $('conv').innerHTML = PASOS.map(p=>{
+      const T=S.tareas.filter(x=>x.orden===p.orden), hechas=T.filter(x=>x.estado==='hecha').length, con=T.filter(x=>x.resultado==='contesto').length;
+      return `<tr><td>${p.orden}. ${esc(p.nombre)}</td><td class="num">${hechas}</td><td class="num">${con}</td><td class="num">${T.filter(x=>x.resultado==='compro').length}</td><td class="num">${hechas?(100*con/hechas).toFixed(1)+'%':'—'}</td></tr>`;
+    }).join('');
+    // playbook
+    $('pb').innerHTML = PASOS.map(p=>{
+      const e = p.espera>=1440 ? (p.espera/1440)+' días' : (p.espera/60)+' horas';
+      return `<li><span class="o">${p.orden}</span><div><div class="t">${esc(p.nombre)} <span class="chip ch-${p.canal}" style="margin-left:4px">${CANAL[p.canal]}</span></div><div class="d">Espera ${e} desde el paso anterior</div></div></li>`;
+    }).join('');
+    $('log').innerHTML = S.log.slice(0,30).map(l=>`<li><span class="mono">${fmt(l.at)}</span><span>${esc(l.txt)}</span></li>`).join('');
+  }
+
+  function act(fn){
+    try { flash = {txt:fn()}; } catch(e){ flash = {txt:e.message, err:true}; }
+    draw();
+  }
+  const vname = id => VENDEDORES.find(v=>v.id===id).nombre;
+
+  document.addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    if (b.dataset.v){ S.vend=b.dataset.v; flash=null; draw(); return; }
+    if (b.dataset.r){
+      const t = siguiente(S.vend), r = RESULTADOS.find(x=>x.k===b.dataset.r);
+      act(()=>{
+        const nota = $('nota').value.trim(), n = registrar(t.id, r.k, nota);
+        const txt = n ? `${t.nombre}: “${r.l}”. Siguiente paso: ${paso(n).nombre} (${fmt(n.vence)}).`
+                      : `${t.nombre}: “${r.l}”. ${['compro','perdido','no_aplica'].includes(r.k)?'Seguimiento cerrado.':'Era el último paso; seguimiento terminado.'}`;
+        logit(vname(S.vend)+' · '+txt); return txt;
+      });
+      return;
+    }
+    if (b.id==='pbtn'){
+      const t = siguiente(S.vend);
+      act(()=>{ const m=+$('pmin').value, mot=$('pmot').value; posponer(t.id,m,mot);
+        const txt=`${t.nombre}: pospuesta hasta ${fmt(t.vence)}. Motivo: ${mot.trim()}.`; logit(vname(S.vend)+' · '+txt); return txt; });
+      return;
+    }
+    if (b.id==='copy'){
+      const txt = $('msg').textContent;
+      const done = ok => { b.textContent = ok?'Copiado':'Selecciona el texto y cópialo'; setTimeout(()=>{b.textContent='Copiar mensaje';},1600); };
+      try { navigator.clipboard.writeText(txt).then(()=>done(true),()=>{selectMsg();done(false);}); } catch(_){ selectMsg(); done(false); }
+      return;
+    }
+    if (b.id==='t2h'||b.id==='t1d'){ S.ahora=new Date(S.ahora.getTime()+(b.id==='t2h'?120:1440)*MIN); flash=null; logit('Reloj adelantado '+(b.id==='t2h'?'2 horas':'1 día')+'.'); draw(); return; }
+    if (b.id==='reset'){ const v=S.vend; seed(); S.vend=v; flash=null; draw(); return; }
+  });
+  function selectMsg(){ const r=document.createRange(); r.selectNodeContents($('msg')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+  $('newf').addEventListener('submit', e=>{
+    e.preventDefault();
+    const nombre=$('f-nombre').value.trim(), cot=$('f-cot').value.trim()||('COT-'+(S.seq+200)), v=$('f-vend').value;
+    const t = iniciar(v, cot, nombre, $('f-tel').value.trim(), {empresa:'MobiliarioTech', monto:$('f-monto').value.trim(), link:'https://mobiliariotech.cl/cotizacion/'+cot});
+    if (!t){ $('newmsg').textContent = cot+' ya tiene un seguimiento abierto. No se duplica.'; return; }
+    logit(`${vname(v)} · Playbook iniciado para ${nombre} (${cot}). Primer paso ${fmt(t.vence)}.`);
+    $('newmsg').textContent = `Listo. ${vname(v)} le escribe por WhatsApp ${rel(t.vence)}.`;
+    draw();
+  });
+  $('f-vend').innerHTML = VENDEDORES.map(v=>`<option value="${v.id}">${esc(v.nombre)}</option>`).join('');
+
+  seed(); draw();
+})();
+</script>
