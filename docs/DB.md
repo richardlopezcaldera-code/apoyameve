@@ -58,3 +58,19 @@ Las credenciales nunca se escriben en el repositorio: van como secrets del Worke
   conviene endurecer las políticas y usar una key de servicio para accesos
   server-side. Ver la nota en [`db/schema-kamiana.sql`](../db/schema-kamiana.sql).
 - No migres datos a mano entre empresas: cada empresa tiene su propio Supabase.
+
+## Capa de ejecución (`ejec_*`) — playbooks de seguimiento
+
+Migración en [`db/ejecucion/`](../db/ejecucion/), para el CRM (`crm-multiempresa`).
+Agrega playbooks (pasos de seguimiento por WhatsApp/correo/llamada), tareas por
+vendedor y vistas para la pantalla "Modo ejecución" y el supervisor. No modifica
+las tablas `kam_`.
+
+| Archivo | Uso |
+|---------|-----|
+| `01-ejecucion-playbooks.sql` | Crea todo. Idempotente (se puede correr más de una vez). Requiere Postgres 15+. |
+| `01-ejecucion-playbooks.test.sql` | Prueba de punta a punta dentro de una transacción con `ROLLBACK` (no deja datos). |
+| `01-ejecucion-playbooks-ROLLBACK.sql` | Borra todo lo de `ejec_*`, **incluidos los datos**. |
+
+Igual que las `kam_`, las tablas tienen RLS con políticas permisivas para `anon`
+(ver la nota de seguridad dentro del archivo).
