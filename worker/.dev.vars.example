@@ -1,0 +1,5 @@
+# Copiar a .dev.vars y completar. .dev.vars NO se commitea.
+# En producción los mismos valores se cargan con:
+#   npx wrangler secret put API_TOKEN
+
+API_TOKEN=""
